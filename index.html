@@ -1,0 +1,1080 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MavrkScribe - AI Medical Documentation</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            /* Warm, Friendly Color Palette */
+            --primary: #6366f1;        /* Soft indigo */
+            --primary-light: #e0e7ff;  /* Light indigo */
+            --primary-dark: #4f46e5;   /* Darker indigo */
+            
+            --accent: #f59e0b;          /* Warm amber */
+            --success: #10b981;         /* Friendly green */
+            --danger: #f87171;          /* Soft red */
+            
+            /* Warm neutrals */
+            --bg: #fefefe;              /* Warm white */
+            --surface: #ffffff;
+            --gray-light: #f9fafb;
+            --gray-soft: #f3f4f6;
+            --gray-mid: #e5e7eb;
+            --gray-text: #6b7280;
+            --text: #374151;
+            --text-dark: #1f2937;
+        }
+
+        body {
+            font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            font-size: 15px;
+            line-height: 1.6;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* Simple Header */
+        .header {
+            background: var(--surface);
+            padding: 16px 24px;
+            padding-left: 85px; /* Space for traffic lights on macOS */
+            border-bottom: 1px solid var(--gray-mid);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            -webkit-app-region: drag;
+            user-select: none;
+        }
+        
+        .header button, .header input {
+            -webkit-app-region: no-drag;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-weight: 600;
+            font-size: 20px;
+            color: var(--text-dark);
+        }
+
+        .logo-icon {
+            width: 36px;
+            height: 36px;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+        }
+
+        .header-btn {
+            padding: 8px 16px;
+            background: transparent;
+            border: none;
+            color: var(--gray-text);
+            font-size: 14px;
+            cursor: pointer;
+            border-radius: 8px;
+            transition: all 0.2s;
+        }
+
+        .header-btn:hover {
+            background: var(--gray-light);
+            color: var(--text-dark);
+        }
+
+        /* Main Layout - Ultra Simple */
+        .main {
+            flex: 1;
+            display: flex;
+            padding: 20px;
+            gap: 20px;
+            overflow: hidden;
+            max-width: 1400px;
+            margin: 0 auto;
+            width: 100%;
+        }
+
+        /* Left Side - Controls */
+        .controls {
+            width: 300px;
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+        }
+
+        /* Recording Card */
+        .record-card {
+            background: linear-gradient(135deg, #f5f7fa 0%, #ffffff 100%);
+            border-radius: 20px;
+            padding: 36px;
+            text-align: center;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
+            border: 1px solid var(--gray-mid);
+        }
+        
+        /* New Consultation Button */
+        .new-consultation-btn {
+            width: 100%;
+            padding: 12px;
+            background: var(--bg-light);
+            color: var(--text-dark);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+            margin-top: 12px;
+        }
+        
+        .new-consultation-btn:hover {
+            background: white;
+            border-color: var(--gray-mid);
+        }
+        
+        .new-consultation-btn:active {
+            background: var(--bg-light);
+        }
+
+        .record-btn {
+            width: 140px;
+            height: 140px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: 4px solid white;
+            color: white;
+            font-size: 44px;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 24px;
+            box-shadow: 0 8px 30px rgba(102, 126, 234, 0.4);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .record-btn::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle, rgba(255,255,255,0.3) 0%, transparent 70%);
+            transform: translate(-50%, -50%) scale(0);
+            transition: transform 0.5s ease;
+            border-radius: 50%;
+        }
+
+        .record-btn:hover {
+            transform: translateY(-3px) scale(1.05);
+            box-shadow: 0 12px 40px rgba(102, 126, 234, 0.5);
+        }
+
+        .record-btn:hover::before {
+            transform: translate(-50%, -50%) scale(2);
+        }
+
+        .record-btn:active {
+            transform: translateY(-1px) scale(1.02);
+        }
+
+        #recordButton.recording,
+        .record-btn.recording {
+            background: linear-gradient(135deg, #f87171 0%, #ef4444 100%);
+            animation: recording-pulse 1.5s ease-in-out infinite;
+            box-shadow: 0 8px 30px rgba(239, 68, 68, 0.4);
+        }
+
+        .record-btn.recording::after {
+            content: '';
+            position: absolute;
+            top: -2px;
+            left: -2px;
+            right: -2px;
+            bottom: -2px;
+            background: linear-gradient(45deg, #ff6b6b, #ffd93d, #6bcf7f, #4ecdc4, #ff6b6b);
+            border-radius: 50%;
+            z-index: -1;
+            animation: rotate-border 3s linear infinite;
+            opacity: 0.7;
+        }
+
+        @keyframes recording-pulse {
+            0%, 100% { 
+                box-shadow: 0 8px 30px rgba(239, 68, 68, 0.4);
+                transform: scale(1);
+            }
+            50% { 
+                box-shadow: 0 8px 50px rgba(239, 68, 68, 0.6);
+                transform: scale(1.02);
+            }
+        }
+
+        @keyframes rotate-border {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(248, 113, 113, 0.7); }
+            70% { box-shadow: 0 0 0 20px rgba(248, 113, 113, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(248, 113, 113, 0); }
+        }
+
+        .status-text {
+            font-size: 13px;
+            color: var(--gray-text);
+            margin-bottom: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+        
+        .status-text.recording {
+            color: var(--danger);
+            animation: fade-pulse 2s ease-in-out infinite;
+        }
+        
+        @keyframes fade-pulse {
+            0%, 100% { opacity: 0.6; }
+            50% { opacity: 1; }
+        }
+
+        .timer {
+            font-size: 32px;
+            font-weight: 300;
+            color: var(--text-dark);
+            font-variant-numeric: tabular-nums;
+            min-height: 44px;
+            letter-spacing: 2px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .timer.recording {
+            animation: color-shift 3s ease-in-out infinite;
+        }
+        
+        @keyframes color-shift {
+            0%, 100% { filter: hue-rotate(0deg); }
+            50% { filter: hue-rotate(30deg); }
+        }
+
+        /* Patient Info Card */
+        .info-card {
+            background: var(--surface);
+            border-radius: 16px;
+            padding: 20px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+        }
+
+        .card-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--gray-text);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 12px;
+        }
+
+        .simple-input {
+            width: 100%;
+            padding: 10px 12px;
+            background: var(--gray-light);
+            border: 2px solid transparent;
+            border-radius: 10px;
+            font-size: 14px;
+            margin-bottom: 10px;
+            transition: all 0.2s;
+        }
+
+        .simple-input:focus {
+            outline: none;
+            border-color: var(--primary);
+            background: white;
+        }
+
+        .simple-input::placeholder {
+            color: var(--gray-text);
+        }
+
+        /* Template Buttons */
+        .template-group {
+            display: flex;
+            gap: 8px;
+            background: var(--gray-light);
+            padding: 4px;
+            border-radius: 12px;
+        }
+
+        .template-btn {
+            flex: 1;
+            padding: 8px;
+            background: transparent;
+            border: none;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--gray-text);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .template-btn:hover {
+            background: white;
+            color: var(--text-dark);
+        }
+
+        .template-btn.active {
+            background: white;
+            color: var(--primary);
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        /* Content Area */
+        .content {
+            flex: 1;
+            display: flex;
+            gap: 20px;
+        }
+        
+        .column {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        /* Panel Style */
+        .panel {
+            flex: 1;
+            background: var(--surface);
+            border-radius: 16px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .panel-header {
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--gray-mid);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .panel-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--text-dark);
+        }
+
+        .live-badge {
+            padding: 4px 10px;
+            background: var(--danger);
+            color: white;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 600;
+            margin-left: 10px;
+            animation: blink 2s infinite;
+        }
+
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+
+        .panel-body {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            background: var(--gray-light);
+        }
+
+        /* Helper Section Styles */
+        .helper-section {
+            background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 16px;
+            position: relative;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+        }
+        
+        .helper-content {
+            font-size: 13px;
+            line-height: 1.6;
+        }
+        
+        .helper-empty {
+            text-align: center;
+            padding: 20px;
+            color: var(--text-light);
+            font-size: 13px;
+        }
+        
+        .billing-item {
+            display: flex;
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+        }
+        
+        .billing-item:last-child {
+            border-bottom: none;
+        }
+        
+        .billing-code {
+            font-weight: 600;
+            color: var(--primary);
+            margin-right: 12px;
+            font-size: 14px;
+        }
+        
+        .billing-desc {
+            flex: 1;
+            color: var(--text-dark);
+            font-size: 13px;
+        }
+        
+        .billing-note {
+            font-size: 11px;
+            color: var(--text-light);
+            margin-left: auto;
+            font-style: italic;
+        }
+        
+        .helper-copy {
+            opacity: 0.5;
+            transition: opacity 0.2s;
+        }
+        
+        .helper-copy:hover {
+            opacity: 1;
+        }
+        
+        /* Empty State */
+        .empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: var(--gray-text);
+            text-align: center;
+        }
+
+        .empty-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+            opacity: 0.3;
+        }
+
+        .empty-text {
+            font-size: 14px;
+        }
+
+        /* Transcript Items */
+        .transcript-item {
+            background: white;
+            border-radius: 12px;
+            padding: 12px 16px;
+            margin-bottom: 12px;
+            border-left: 3px solid var(--primary);
+            animation: slideIn 0.3s ease;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .transcript-item.manual {
+            border-left-color: var(--accent);
+            background: #fffbeb;
+        }
+        
+        .transcript-separator {
+            text-align: center;
+            margin: 20px 0;
+            color: var(--text-light);
+            font-size: 12px;
+            position: relative;
+        }
+        
+        .transcript-separator span {
+            background: var(--bg-light);
+            padding: 0 12px;
+            position: relative;
+            z-index: 1;
+        }
+        
+        .transcript-separator::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: var(--border);
+            z-index: 0;
+        }
+
+        .speaker {
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--gray-text);
+            text-transform: uppercase;
+            margin-bottom: 4px;
+        }
+
+        .message {
+            font-size: 14px;
+            color: var(--text-dark);
+            line-height: 1.5;
+        }
+
+        /* Manual Input */
+        .input-section {
+            padding: 16px 20px;
+            background: white;
+            border-top: 1px solid var(--gray-mid);
+            display: flex;
+            gap: 10px;
+        }
+
+        .message-input {
+            flex: 1;
+            padding: 10px 14px;
+            background: var(--gray-light);
+            border: 2px solid transparent;
+            border-radius: 24px;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+
+        .message-input:focus {
+            outline: none;
+            border-color: var(--primary);
+            background: white;
+        }
+
+        .send-btn {
+            padding: 10px 20px;
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 24px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .send-btn:hover {
+            background: var(--primary-dark);
+            transform: translateY(-1px);
+        }
+
+        /* Note Content */
+        .note-content {
+            font-size: 14px;
+            line-height: 1.6;
+            color: var(--text-dark);
+        }
+
+        .note-content.editable {
+            background: white;
+            padding: 16px;
+            border-radius: 12px;
+            border: 2px solid var(--primary-light);
+            outline: none;
+        }
+
+        .note-section {
+            margin-bottom: 20px;
+        }
+
+        .note-heading {
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--primary);
+            text-transform: uppercase;
+            margin-bottom: 8px;
+        }
+
+        /* Action Buttons */
+        .btn-group {
+            display: flex;
+            gap: 8px;
+        }
+
+        .btn {
+            padding: 8px 16px;
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn:hover {
+            background: var(--primary-dark);
+            transform: translateY(-1px);
+        }
+
+        .btn-ghost {
+            background: transparent;
+            color: var(--gray-text);
+            border: 1px solid var(--gray-mid);
+        }
+
+        .btn-ghost:hover {
+            background: var(--gray-light);
+            color: var(--text-dark);
+            border-color: var(--gray-mid);
+        }
+
+        .btn-icon {
+            width: 36px;
+            height: 36px;
+            padding: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: transparent;
+            border: 1px solid var(--gray-mid);
+            border-radius: 8px;
+            font-size: 18px;
+        }
+
+        .btn-icon:hover {
+            background: var(--gray-light);
+            border-color: var(--primary);
+        }
+
+        /* Footer */
+        .footer {
+            background: white;
+            border-top: 1px solid var(--gray-mid);
+            padding: 12px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 12px;
+            color: var(--gray-text);
+        }
+
+        .footer-stats {
+            display: flex;
+            gap: 20px;
+        }
+
+        .stat {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .stat-dot {
+            width: 6px;
+            height: 6px;
+            background: var(--success);
+            border-radius: 50%;
+        }
+
+        /* Toast */
+        .toast {
+            position: fixed;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%) translateY(100px);
+            background: #2c3e50;
+            color: white;
+            padding: 14px 28px;
+            border-radius: 8px;
+            font-size: 15px;
+            font-weight: 500;
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+            opacity: 0;
+            transition: all 0.3s ease;
+            pointer-events: none;
+            z-index: 10000;
+            min-width: 250px;
+            text-align: center;
+        }
+
+        .toast.show {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+        
+        .toast.error {
+            background: #e74c3c;
+        }
+        
+        .toast.success {
+            background: #27ae60;
+        }
+        
+        .toast.warning {
+            background: #f39c12;
+        }
+        
+        /* Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 9999;
+            animation: fadeIn 0.2s ease;
+        }
+        
+        .modal.show {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .modal-content {
+            background: white;
+            border-radius: 12px;
+            width: 90%;
+            max-width: 600px;
+            max-height: 80vh;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+        }
+        
+        .modal-header {
+            padding: 20px 24px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        
+        .modal-header h2 {
+            margin: 0;
+            font-size: 20px;
+            color: var(--text-dark);
+        }
+        
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 28px;
+            color: var(--text-light);
+            cursor: pointer;
+            padding: 0;
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 4px;
+            transition: all 0.2s;
+        }
+        
+        .modal-close:hover {
+            background: var(--bg-light);
+            color: var(--text-dark);
+        }
+        
+        .modal-body {
+            padding: 24px;
+            overflow-y: auto;
+            flex: 1;
+        }
+        
+        /* History Items */
+        .history-item {
+            padding: 16px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            margin-bottom: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .history-item:hover {
+            background: var(--bg-light);
+            transform: translateY(-1px);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+        
+        .history-date {
+            font-size: 12px;
+            color: var(--text-light);
+            margin-bottom: 8px;
+        }
+        
+        .history-patient {
+            font-weight: 600;
+            color: var(--text-dark);
+            margin-bottom: 4px;
+        }
+        
+        .history-type {
+            font-size: 14px;
+            color: var(--text-light);
+            display: inline-block;
+            padding: 2px 8px;
+            background: var(--bg-light);
+            border-radius: 4px;
+        }
+        
+        .history-preview {
+            font-size: 14px;
+            color: var(--text-light);
+            margin-top: 8px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        /* Responsive */
+        @media (max-width: 1024px) {
+            .main {
+                flex-direction: column;
+            }
+            
+            .controls {
+                width: 100%;
+                flex-direction: row;
+                gap: 16px;
+            }
+            
+            .content {
+                flex-direction: column;
+            }
+        }
+
+        /* Print */
+        @media print {
+            body * { visibility: hidden; }
+            .note-content, .note-content * { visibility: visible; }
+            .note-content {
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <div class="header">
+        <div class="logo">
+            <img src="icon.png" alt="Mavrk" style="height: 64px; width: auto;">
+        </div>
+        <div style="display: flex; gap: 12px; align-items: center;">
+            <!-- Subscription badge will be inserted here -->
+            <div id="subscriptionBadge" style="display: none;"></div>
+            <button class="header-btn" onclick="showHistory()">📂 History</button>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main">
+        <!-- Left Controls -->
+        <div class="controls">
+            <!-- Recording -->
+            <div class="record-card">
+                <button class="record-btn" id="recordButton" onclick="toggleRecording()">
+                    <span id="recordIcon">🎙️</span>
+                </button>
+                <div class="status-text" id="recordingStatus">Ready to record</div>
+                <div class="timer" id="recordingTimer">00:00</div>
+            </div>
+            
+            <!-- New Consultation Button -->
+            <button class="new-consultation-btn" onclick="startNewConsultation(); clearCurrentSession()">
+                <span style="font-size: 20px; margin-right: 8px;">➕</span>
+                New Consultation
+            </button>
+
+            <!-- Patient Info -->
+            <div class="info-card">
+                <div class="card-title">Quick Info</div>
+                <input type="text" class="simple-input" id="patientName" placeholder="Patient name (optional)">
+                <input type="text" class="simple-input" id="visitType" placeholder="Visit type (optional)">
+                
+                <div class="card-title" style="margin-top: 16px;">Template</div>
+                <div class="template-group">
+                    <button class="template-btn active" onclick="selectTemplate('soap')" data-template="soap">SOAP</button>
+                    <button class="template-btn" onclick="selectTemplate('consult')" data-template="consult">Consult</button>
+                    <button class="template-btn" onclick="selectTemplate('progress')" data-template="progress">Progress</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Content Area -->
+        <div class="content">
+            <!-- Left Column - Transcript -->
+            <div class="column">
+                <div class="panel" style="height: 100%;">
+                    <div class="panel-header">
+                        <div class="panel-title">
+                            Live Transcript
+                            <span class="live-badge" id="liveIndicator" style="display: none;">● LIVE</span>
+                        </div>
+                    </div>
+                    <div class="panel-body" id="transcriptContent">
+                        <div class="empty-state">
+                            <div class="empty-icon">🎙️</div>
+                            <div class="empty-text">Click the microphone to start recording</div>
+                        </div>
+                    </div>
+                    <div class="input-section">
+                        <input type="text" class="message-input" id="manualTranscriptInput" 
+                               placeholder="Type a note..." 
+                               onkeypress="if(event.key==='Enter') addManualTranscriptNote()">
+                        <button class="send-btn" onclick="addManualTranscriptNote()">Add</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Column - Note and Billing -->
+            <div class="column">
+                <!-- Note Panel -->
+                <div class="panel" style="flex: 2;">
+                    <div class="panel-header">
+                        <div class="panel-title">Clinical Note</div>
+                        <div class="btn-group">
+                            <button class="btn" id="generateBtn" onclick="generateNote()">Generate</button>
+                            <button class="btn-icon btn-ghost" id="editNoteBtn" onclick="toggleEditMode()" 
+                                    title="Edit" style="display: none;">✏️</button>
+                            <button class="btn-icon btn-ghost" id="saveNoteBtn" onclick="saveEditedNote()" 
+                                    title="Save" style="display: none;">✓</button>
+                            <button class="btn-icon btn-ghost" onclick="copyNote()" title="Copy">📋</button>
+                            <button class="btn-icon btn-ghost" onclick="printNote()" title="Print">🖨️</button>
+                            <button class="btn-icon btn-ghost" onclick="saveToHistory()" title="Save to History">💾</button>
+                        </div>
+                    </div>
+                    <div class="panel-body note-content" id="noteContent">
+                        <div class="empty-state">
+                            <div class="empty-icon">✨</div>
+                            <div class="empty-text">Your AI-generated note will appear here</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Billing Helper Section -->
+                <div class="helper-section" style="min-height: 150px;">
+                    <div class="helper-content" id="billingContent">
+                        <div class="helper-empty">
+                            <span style="opacity: 0.5;">💡 Billing codes will appear here after generating notes</span>
+                        </div>
+                    </div>
+                    <button class="btn-icon btn-ghost helper-copy" onclick="copyBilling()" title="Copy billing codes" style="position: absolute; top: 8px; right: 8px; display: none;">📋</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="footer">
+        <div class="footer-stats">
+            <div class="stat">
+                <span class="stat-dot"></span>
+                <span>Connected</span>
+            </div>
+            <div class="stat" id="wordCount">0 words</div>
+            <div class="stat" id="sessionDuration">Session: 0m</div>
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div class="toast" id="toast"></div>
+    
+    <!-- History Modal -->
+    <div class="modal" id="historyModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Consultation History</h2>
+                <div style="display: flex; gap: 8px;">
+                    <button class="header-btn" onclick="clearHistory()" style="font-size: 12px; padding: 4px 12px;">Clear All</button>
+                    <button class="modal-close" onclick="closeHistory()">×</button>
+                </div>
+            </div>
+            <div class="modal-body" id="historyList">
+                <div class="empty-state">
+                    <div class="empty-icon">📋</div>
+                    <div class="empty-text">No saved consultations yet</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="transcription-medical-service.js"></script>
+    <script src="openai-responses.js"></script>
+    <script src="scribe-app.js"></script>
+    
+    <script>
+        // Template selection
+        function selectTemplate(template) {
+            document.querySelectorAll('.template-btn').forEach(btn => {
+                btn.classList.remove('active');
+                if (btn.dataset.template === template) {
+                    btn.classList.add('active');
+                }
+            });
+            // Update the global template variable
+            if (typeof selectedTemplate !== 'undefined') {
+                selectedTemplate = template;
+            }
+        }
+    </script>
+</body>
+</html>
