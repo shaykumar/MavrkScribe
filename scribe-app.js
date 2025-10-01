@@ -532,13 +532,17 @@ function setupKeyboardShortcuts() {
 function addManualTranscriptNote() {
     const input = document.getElementById('manualTranscriptInput');
     const transcriptContent = document.getElementById('transcriptContent');
-    
+
+    console.log('addManualTranscriptNote called');
+
     if (!input || !transcriptContent) {
         console.error('Manual input or transcript content not found');
         return;
     }
-    
+
     const note = input.value.trim();
+    console.log('Note to add:', note);
+
     if (!note) {
         showToast('Please enter a note', 'warning');
         return;
@@ -575,7 +579,14 @@ function addManualTranscriptNote() {
     transcriptContent.scrollTop = transcriptContent.scrollHeight;
     
     // Add to current transcript for note generation
-    currentTranscript += `\n[Manual Note ${timestamp}]: ${note}`;
+    if (currentTranscript && currentTranscript.trim()) {
+        currentTranscript += `\n[Manual Note ${timestamp}]: ${note}`;
+    } else {
+        currentTranscript = `[Manual Note ${timestamp}]: ${note}`;
+    }
+
+    console.log('Updated currentTranscript. New length:', currentTranscript.length);
+    console.log('Transcript preview:', currentTranscript.substring(0, 100));
     
     // Update word count
     const words = note.split(/\s+/).filter(word => word.length > 0);
@@ -639,38 +650,78 @@ async function generateNote() {
     const generateBtn = document.getElementById('generateBtn');
     const noteContent = document.getElementById('noteContent');
     const billingContent = document.getElementById('billingContent');
-    
-    if (!currentTranscript.trim()) {
-        showToast('No transcript available. Please record a consultation first.', 'error');
+
+    console.log('Generate Note called. Current transcript length:', currentTranscript ? currentTranscript.length : 0);
+    console.log('Transcript content:', currentTranscript ? currentTranscript.substring(0, 200) : 'empty');
+
+    if (!currentTranscript || !currentTranscript.trim()) {
+        showToast('No content available. Please record or add notes first.', 'error');
         return;
     }
     
     // Show loading state
     generateBtn.innerHTML = '<span class="loading"></span> Generating...';
     generateBtn.disabled = true;
-    
-    // Show loading in billing section
-    billingContent.innerHTML = '<div class="helper-empty"><span style="opacity: 0.5;">⏳ Analyzing billing codes...</span></div>';
+
+    // Check if this is a medical template
+    const medicalTemplates = ['soap', 'consult', 'progress'];
+    const isMedicalTemplate = medicalTemplates.includes(selectedTemplate);
+
+    // Show loading in billing section only for medical templates
+    if (isMedicalTemplate && billingContent) {
+        billingContent.innerHTML = '<div class="helper-empty"><span style="opacity: 0.5;">⏳ Analyzing billing codes...</span></div>';
+    }
     
     try {
-        // Get patient info
-        const patientName = document.getElementById('patientName').value || 'Patient';
-        const visitType = document.getElementById('visitType').value || 'Consultation';
+        // Get session info - use more appropriate default based on template
+        const nameField = document.getElementById('sessionName').value;
+        const templateDefaults = {
+            // Medical
+            soap: 'Patient',
+            consult: 'Patient',
+            progress: 'Patient',
+            // Education
+            lecture: 'Lecture Topic',
+            seminar: 'Seminar Topic',
+            study: 'Study Subject',
+            // Workplace
+            meeting: 'Meeting Subject',
+            standup: 'Team/Project',
+            interview: 'Candidate Name',
+            review: 'Employee Name',
+            // General
+            general: 'Note Title',
+            personal: 'Personal Note',
+            brainstorm: 'Brainstorm Topic'
+        };
+
+        const patientName = nameField || templateDefaults[selectedTemplate] || 'Untitled';
+        const visitType = document.getElementById('sessionType').value || 'Session';
         
         // Create prompts
         const notePrompt = createNotePrompt(currentTranscript, selectedTemplate, patientName, visitType);
-        const billingPrompt = createBillingPrompt(currentTranscript, visitType);
-        
-        console.log('Generating clinical note and billing suggestions...');
-        
-        // Call AI to generate note and billing in parallel
+
+        console.log('Generating note...');
+
+        // Call AI to generate note (and billing for medical templates only)
         if (window.electronAPI && window.electronAPI.chatWithLLM) {
             try {
-                // Make parallel calls
-                const [noteResponse, billingResponse] = await Promise.all([
-                    window.electronAPI.chatWithLLM(notePrompt),
-                    window.electronAPI.chatWithLLM(billingPrompt)
-                ]);
+                let noteResponse, billingResponse;
+
+                if (isMedicalTemplate) {
+                    // For medical templates, generate both note and billing
+                    const billingPrompt = createBillingPrompt(currentTranscript, visitType);
+                    console.log('Also generating billing suggestions for medical template...');
+
+                    // Make parallel calls
+                    [noteResponse, billingResponse] = await Promise.all([
+                        window.electronAPI.chatWithLLM(notePrompt),
+                        window.electronAPI.chatWithLLM(billingPrompt)
+                    ]);
+                } else {
+                    // For non-medical templates, only generate the note
+                    noteResponse = await window.electronAPI.chatWithLLM(notePrompt);
+                }
                 
                 // Handle note response
                 if (noteResponse && noteResponse.success && noteResponse.result) {
@@ -686,13 +737,17 @@ async function generateNote() {
                     generateTemplateNote();
                 }
                 
-                // Handle billing response
-                if (billingResponse && billingResponse.success && billingResponse.result) {
-                    console.log('Billing suggestions generated');
-                    displayBillingSuggestions(billingResponse.result);
-                } else {
-                    console.error('Billing generation failed:', billingResponse);
-                    billingContent.innerHTML = '<div class="helper-empty"><span style="opacity: 0.5;">💡 Unable to generate billing suggestions</span></div>';
+                // Handle billing response (only for medical templates)
+                if (isMedicalTemplate) {
+                    if (billingResponse && billingResponse.success && billingResponse.result) {
+                        console.log('Billing suggestions generated');
+                        displayBillingSuggestions(billingResponse.result);
+                    } else {
+                        console.error('Billing generation failed:', billingResponse);
+                        if (billingContent) {
+                            billingContent.innerHTML = '<div class="helper-empty"><span style="opacity: 0.5;">💡 Unable to generate billing suggestions</span></div>';
+                        }
+                    }
                 }
                 
             } catch (err) {
@@ -720,7 +775,7 @@ async function generateNote() {
 function createNotePrompt(transcript, template, patientName, visitType) {
     const date = new Date().toLocaleDateString();
     const time = new Date().toLocaleTimeString();
-    
+
     const templates = {
         soap: `You are a medical scribe. Generate a professional SOAP note from the following medical consultation transcript.
 
@@ -895,10 +950,274 @@ Generate a progress note in MARKDOWN format:
 ### Next Steps
 - **Follow-up:** 
 - **Tests Ordered:** 
-- **Referrals:** `
+- **Referrals:** `,
+
+        meeting: `Generate comprehensive meeting notes from this transcript.
+
+Format using MARKDOWN:
+
+# Meeting Notes
+**Date:** ${new Date().toLocaleDateString()}
+**Subject:** ${patientName || 'Meeting'}
+
+## Attendees
+[Extract from transcript]
+
+## Agenda & Discussion
+### Key Topics
+-
+
+## Decisions Made
+-
+
+## Action Items
+| Action | Owner | Deadline |
+|--------|-------|----------|
+| | | |
+
+## Next Steps
+- `,
+
+        lecture: `Generate comprehensive lecture notes from this transcript.
+
+Format using MARKDOWN:
+
+# Lecture Notes
+**Date:** ${new Date().toLocaleDateString()}
+**Topic:** ${patientName || 'Lecture'}
+
+## Main Concepts
+### Key Points
+-
+
+## Detailed Notes
+-
+
+## Examples & Applications
+-
+
+## Summary
+### Key Takeaways
+1.
+2.
+
+### Questions to Review
+- `,
+
+        seminar: `Generate seminar notes from this transcript.
+
+Format using MARKDOWN:
+
+# Seminar Notes
+**Date:** ${new Date().toLocaleDateString()}
+**Topic:** ${patientName || 'Seminar'}
+**Presenter:** [Extract if mentioned]
+
+## Main Presentation
+### Key Topics
+-
+
+### Important Points
+-
+
+## Discussion & Q&A
+-
+
+## Key Insights
+-
+
+## Follow-up Resources
+- `,
+
+        study: `Generate study session notes from this transcript.
+
+Format using MARKDOWN:
+
+# Study Session Notes
+**Date:** ${new Date().toLocaleDateString()}
+**Subject:** ${patientName || 'Study Session'}
+
+## Topics Covered
+-
+
+## Key Concepts
+### Important Definitions
+-
+
+### Main Ideas
+-
+
+## Practice Problems/Examples
+-
+
+## Areas for Review
+-
+
+## Next Session Plan
+- `,
+
+        standup: `Generate stand-up meeting notes from this transcript.
+
+Format using MARKDOWN:
+
+# Stand-up Notes
+**Date:** ${new Date().toLocaleDateString()}
+**Team/Project:** ${patientName || 'Team'}
+
+## Team Updates
+
+### Yesterday's Progress
+-
+
+### Today's Plans
+-
+
+### Blockers/Issues
+-
+
+## Action Items
+-
+
+## Notes
+- `,
+
+        interview: `Generate interview notes from this transcript.
+
+Format using MARKDOWN:
+
+# Interview Notes
+**Date:** ${new Date().toLocaleDateString()}
+**Candidate/Subject:** ${patientName || 'Interviewee'}
+
+## Background
+-
+
+## Questions & Responses
+### Key Topics Discussed
+-
+
+## Strengths Observed
+-
+
+## Areas of Concern
+-
+
+## Overall Assessment
+-
+
+## Recommendations/Next Steps
+- `,
+
+        review: `Generate performance review notes from this transcript.
+
+Format using MARKDOWN:
+
+# Performance Review Notes
+**Date:** ${new Date().toLocaleDateString()}
+**Employee:** ${patientName || 'Employee'}
+
+## Performance Summary
+### Achievements
+-
+
+### Strengths
+-
+
+## Areas for Improvement
+-
+
+## Goals & Objectives
+### Previous Goals - Status
+-
+
+### New Goals
+-
+
+## Action Plan
+-
+
+## Next Review Date
+- `,
+
+        personal: `Generate personal notes from this transcript.
+
+Format using MARKDOWN:
+
+# Personal Notes
+**Date:** ${new Date().toLocaleDateString()}
+**Topic:** ${patientName || 'Personal'}
+
+## Main Points
+-
+
+## Thoughts & Reflections
+-
+
+## Ideas
+-
+
+## To-Do Items
+-
+
+## Follow-up
+- `,
+
+        brainstorm: `Generate brainstorming notes from this transcript.
+
+Format using MARKDOWN:
+
+# Brainstorming Session
+**Date:** ${new Date().toLocaleDateString()}
+**Topic:** ${patientName || 'Brainstorming'}
+
+## Ideas Generated
+### Main Ideas
+1.
+2.
+3.
+
+### Supporting Ideas
+-
+
+## Pros & Cons Analysis
+### Advantages
+-
+
+### Challenges
+-
+
+## Next Steps
+-
+
+## Action Items
+- `,
+
+        general: `Generate well-organized notes from this transcript.
+
+Format using MARKDOWN:
+
+# Notes
+**Date:** ${new Date().toLocaleDateString()}
+**Title:** ${patientName || 'General Notes'}
+
+## Overview
+-
+
+## Main Content
+### Key Points
+-
+
+### Details
+-
+
+## Summary
+-
+
+## Follow-up Items
+- `
     };
-    
-    return templates[template] || templates.soap;
+
+    return templates[template] || templates.general;
 }
 
 // Create billing suggestion prompt
@@ -1112,22 +1431,22 @@ function parseNoteIntoSections(noteText) {
 // Generate template-based note when AI is not available
 function generateTemplateNote() {
     console.log('Generating template-based note...');
-    
-    const patientName = document.getElementById('patientName').value || 'Patient';
-    const visitType = document.getElementById('visitType').value || 'Consultation';
+
+    const sessionName = document.getElementById('sessionName').value || 'Note';
+    const sessionType = document.getElementById('sessionType').value || 'General';
     const date = new Date().toLocaleDateString();
     
     // Extract key information from transcript
     const extractedInfo = extractInfoFromTranscript(currentTranscript);
     
     let noteText = '';
-    
+
     if (selectedTemplate === 'soap') {
-        noteText = generateSOAPTemplate(patientName, visitType, date, extractedInfo);
+        noteText = generateSOAPTemplate(sessionName, sessionType, date, extractedInfo);
     } else if (selectedTemplate === 'consult') {
-        noteText = generateConsultTemplate(patientName, visitType, date, extractedInfo);
+        noteText = generateConsultTemplate(sessionName, sessionType, date, extractedInfo);
     } else if (selectedTemplate === 'progress') {
-        noteText = generateProgressTemplate(patientName, visitType, date, extractedInfo);
+        noteText = generateProgressTemplate(sessionName, sessionType, date, extractedInfo);
     }
     
     console.log('Template note generated');
@@ -1403,8 +1722,8 @@ function printNote() {
     }
     
     // Add patient info to the print if available
-    const patientName = document.getElementById('patientName').value;
-    const visitType = document.getElementById('visitType').value;
+    const sessionName = document.getElementById('sessionName').value;
+    const sessionType = document.getElementById('sessionType').value;
     
     if (patientName || visitType) {
         // Create a temporary header for printing
@@ -1544,8 +1863,8 @@ function clearCurrentSession() {
     }
     
     // Clear form fields
-    document.getElementById('patientName').value = '';
-    document.getElementById('visitType').value = '';
+    document.getElementById('sessionName').value = '';
+    document.getElementById('sessionType').value = '';
     
     // Clear transcript
     currentTranscript = '';
@@ -1591,8 +1910,8 @@ function saveToHistory() {
         id: currentConsultationId,
         date: new Date().toISOString(),
         lastModified: new Date().toISOString(),
-        patientName: document.getElementById('patientName').value || 'Unknown Patient',
-        visitType: document.getElementById('visitType').value || 'General Visit',
+        patientName: document.getElementById('sessionName').value || 'Untitled Session',
+        visitType: document.getElementById('sessionType').value || 'General',
         transcript: currentTranscript,
         note: document.getElementById('noteContent').innerHTML,
         template: selectedTemplate,
@@ -1684,8 +2003,8 @@ function loadConsultation(id) {
         currentConsultationId = consultation.id;
         
         // Load the consultation data
-        document.getElementById('patientName').value = consultation.patientName;
-        document.getElementById('visitType').value = consultation.visitType;
+        document.getElementById('sessionName').value = consultation.patientName;
+        document.getElementById('sessionType').value = consultation.visitType;
         
         // Load transcript
         currentTranscript = consultation.transcript || '';
