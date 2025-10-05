@@ -28,11 +28,11 @@ class AWSTranscribeMedical {
     
     async startTranscription(options = {}) {
         if (this.isTranscribing) {
-            console.log('Transcription already in progress');
+            // DEBUG:('Transcription already in progress');
             return { success: false, error: 'Already transcribing' };
         }
         
-        console.log('Starting AWS Transcribe Medical with options:', options);
+        // DEBUG:('Starting AWS Transcribe Medical with options:', options);
         
         const {
             specialty = 'PRIMARYCARE', // PRIMARYCARE, CARDIOLOGY, NEUROLOGY, ONCOLOGY, RADIOLOGY, UROLOGY
@@ -47,7 +47,7 @@ class AWSTranscribeMedical {
         this.onError = onError;
         
         try {
-            console.log('Creating audio stream...');
+            // DEBUG:('Creating audio stream...');
             // Create a passthrough stream for audio with proper settings
             const stream = new PassThrough({
                 highWaterMark: 1024 * 16 // 16KB buffer
@@ -59,7 +59,7 @@ class AWSTranscribeMedical {
             this.audioChunks = [];
             this.chunkTimer = null;
             
-            console.log('Configuring transcription parameters...');
+            // DEBUG:('Configuring transcription parameters...');
             // Configure transcription parameters
             const params = {
                 LanguageCode: 'en-US',
@@ -72,19 +72,19 @@ class AWSTranscribeMedical {
                 AudioStream: this.createAudioPayloadStream(stream)
             };
             
-            console.log('Sending command to AWS Transcribe Medical...');
+            // DEBUG:('Sending command to AWS Transcribe Medical...');
             // Start medical transcription
             const command = new StartMedicalStreamTranscriptionCommand(params);
             const response = await this.client.send(command);
             
-            console.log('AWS Transcribe Medical stream started successfully');
+            // DEBUG:('AWS Transcribe Medical stream started successfully');
             
             // Process transcription results in background
             this.processTranscriptionStream(response.TranscriptResultStream, {
                 onTranscript,
                 onError
             }).catch(err => {
-                console.error('Stream processing error:', err);
+                // ERROR:('Stream processing error:', err);
                 if (onError) onError(err);
                 this.stopTranscription();
             });
@@ -94,8 +94,8 @@ class AWSTranscribeMedical {
             return { success: true };
             
         } catch (error) {
-            console.error('Error starting AWS Transcribe Medical:', error);
-            console.error('Error details:', error.message, error.code);
+            // ERROR:('Error starting AWS Transcribe Medical:', error);
+            // ERROR:('Error details:', error.message, error.code);
             if (onError) onError(error);
             this.isTranscribing = false;
             return { success: false, error: error.message };
@@ -114,30 +114,30 @@ class AWSTranscribeMedical {
                 
                 // Log first few chunks and periodic updates
                 if (this.chunkCount <= 3 || this.chunkCount % 10 === 0) {
-                    console.log(`Writing chunk #${this.chunkCount} to stream, size: ${buffer.length} bytes`);
+                    // DEBUG:(`Writing chunk #${this.chunkCount} to stream, size: ${buffer.length} bytes`);
                 }
                 
                 // Write directly to stream
                 const written = this.audioStream.write(buffer);
                 
                 if (!written) {
-                    console.log('Stream backpressure detected');
+                    // DEBUG:('Stream backpressure detected');
                     // Force drain the stream
                     this.audioStream.once('drain', () => {
-                        console.log('Stream drained, ready for more data');
+                        // DEBUG:('Stream drained, ready for more data');
                     });
                 }
                 
                 return { success: true };
             } catch (error) {
-                console.error('Error sending audio chunk:', error);
+                // ERROR:('Error sending audio chunk:', error);
                 return { success: false, error: error.message };
             }
         } else {
             if (!this.isTranscribing) {
-                console.log('Cannot send audio - not transcribing');
+                // DEBUG:('Cannot send audio - not transcribing');
             } else if (!this.audioStream) {
-                console.log('Cannot send audio - stream not ready');
+                // DEBUG:('Cannot send audio - stream not ready');
             }
             return { success: false, error: 'Not ready' };
         }
@@ -145,7 +145,7 @@ class AWSTranscribeMedical {
     
     // Handle backpressure by sending buffered chunks
     startChunkTimer() {
-        console.log('Starting backpressure handler');
+        // DEBUG:('Starting backpressure handler');
         this.chunkTimer = setInterval(() => {
             // Only process if there are buffered chunks (from backpressure)
             if (this.audioChunks && this.audioChunks.length > 0 && this.audioStream) {
@@ -161,18 +161,18 @@ class AWSTranscribeMedical {
                             break;
                         }
                     } catch (error) {
-                        console.error('Error writing buffered chunk:', error);
+                        // ERROR:('Error writing buffered chunk:', error);
                     }
                 }
                 if (sent > 0) {
-                    console.log(`Cleared ${sent} buffered chunks from backpressure`);
+                    // DEBUG:(`Cleared ${sent} buffered chunks from backpressure`);
                 }
             }
         }, 1000); // Check every second
     }
     
     async* createAudioPayloadStream(audioStream) {
-        console.log('Starting audio payload stream generator');
+        // DEBUG:('Starting audio payload stream generator');
         let chunksSent = 0;
         
         try {
@@ -180,22 +180,22 @@ class AWSTranscribeMedical {
             for await (const chunk of audioStream) {
                 chunksSent++;
                 if (chunksSent % 10 === 0) {
-                    console.log(`Audio generator sent ${chunksSent} chunks to AWS Transcribe`);
+                    // DEBUG:(`Audio generator sent ${chunksSent} chunks to AWS Transcribe`);
                 }
                 yield { AudioEvent: { AudioChunk: chunk } };
             }
         } catch (error) {
-            console.error('Error in audio payload stream:', error);
+            // ERROR:('Error in audio payload stream:', error);
             throw error;
         } finally {
-            console.log(`Audio payload stream ended after ${chunksSent} chunks`);
+            // DEBUG:(`Audio payload stream ended after ${chunksSent} chunks`);
         }
     }
     
     async processTranscriptionStream(transcriptStream, callbacks) {
         const { onTranscript, onError } = callbacks;
         
-        console.log('Starting to process transcription stream...');
+        // DEBUG:('Starting to process transcription stream...');
         let eventCount = 0;
         
         try {
@@ -204,7 +204,7 @@ class AWSTranscribeMedical {
                 
                 if (event.TranscriptEvent) {
                     const results = event.TranscriptEvent.Transcript.Results;
-                    console.log(`Received TranscriptEvent #${eventCount} with ${results.length} results`);
+                    // DEBUG:(`Received TranscriptEvent #${eventCount} with ${results.length} results`);
                     
                     for (const result of results) {
                         if (!result.IsPartial) {
@@ -212,7 +212,7 @@ class AWSTranscribeMedical {
                             const transcript = result.Alternatives[0].Transcript;
                             const items = result.Alternatives[0].Items || [];
                             
-                            console.log('AWS Final transcript:', transcript);
+                            // DEBUG:('AWS Final transcript:', transcript);
                             
                             // Extract medical entities if available
                             const entities = result.Alternatives[0].Entities || [];
@@ -232,14 +232,14 @@ class AWSTranscribeMedical {
                                     isFinal: true
                                 });
                             } else {
-                                console.warn('No onTranscript callback!');
+                                // WARN:('No onTranscript callback!');
                             }
                         } else {
                             // Partial transcript (interim results)
                             const transcript = result.Alternatives[0].Transcript;
                             
                             if (transcript) {
-                                console.log('AWS Interim transcript:', transcript);
+                                // DEBUG:('AWS Interim transcript:', transcript);
                             }
                             
                             if (onTranscript) {
@@ -251,16 +251,16 @@ class AWSTranscribeMedical {
                                     isFinal: false
                                 });
                             } else {
-                                console.warn('No onTranscript callback for interim!');
+                                // WARN:('No onTranscript callback for interim!');
                             }
                         }
                     }
                 } else {
-                    console.log(`Event #${eventCount} - No TranscriptEvent, other event type:`, Object.keys(event));
+                    // DEBUG:(`Event #${eventCount} - No TranscriptEvent, other event type:`, Object.keys(event));
                 }
             }
         } catch (error) {
-            console.error('Error processing transcription stream:', error);
+            // ERROR:('Error processing transcription stream:', error);
             if (onError) onError(error);
         }
     }
@@ -360,7 +360,7 @@ class AWSTranscribeMedical {
     
     // Send test audio to verify the stream works
     sendTestAudio(stream) {
-        console.log('Sending test audio to verify stream...');
+        // DEBUG:('Sending test audio to verify stream...');
         
         // Generate a simple sine wave tone at 440Hz (A4 note)
         const sampleRate = 16000;
@@ -383,13 +383,13 @@ class AWSTranscribeMedical {
         const buffer = Buffer.from(audioData.buffer);
         stream.write(buffer);
         
-        console.log(`Sent ${buffer.length} bytes of test audio (440Hz tone)`);
+        // DEBUG:(`Sent ${buffer.length} bytes of test audio (440Hz tone)`);
         
         // Send silence after the tone
         const silenceBuffer = Buffer.alloc(3200, 0); // 100ms of silence
         stream.write(silenceBuffer);
         
-        console.log('Test audio sent, stream should be active');
+        // DEBUG:('Test audio sent, stream should be active');
     }
 }
 

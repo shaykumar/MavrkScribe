@@ -881,20 +881,287 @@
             to { opacity: 1; }
         }
 
-        /* Responsive */
+        /* Responsive Design */
+
+        /* Tablet - Landscape (1024px and below) */
         @media (max-width: 1024px) {
             .main {
                 flex-direction: column;
+                padding: 15px;
             }
-            
+
             .controls {
                 width: 100%;
                 flex-direction: row;
                 gap: 16px;
             }
-            
+
+            .record-card {
+                padding: 24px;
+            }
+
+            .record-btn {
+                width: 100px;
+                height: 100px;
+                font-size: 32px;
+            }
+
             .content {
                 flex-direction: column;
+            }
+
+            .column {
+                width: 100%;
+            }
+
+            .header {
+                padding: 12px 15px;
+            }
+
+            .logo img {
+                height: 80px;
+            }
+        }
+
+        /* Tablet - Portrait (768px and below) */
+        @media (max-width: 768px) {
+            body {
+                font-size: 14px;
+            }
+
+            .main {
+                gap: 15px;
+                padding: 12px;
+            }
+
+            .controls {
+                flex-direction: column;
+            }
+
+            .info-card {
+                padding: 16px;
+            }
+
+            .record-card {
+                padding: 20px;
+            }
+
+            .record-btn {
+                width: 80px;
+                height: 80px;
+                font-size: 28px;
+            }
+
+            .timer {
+                font-size: 24px;
+            }
+
+            .panel-header {
+                padding: 12px 16px;
+            }
+
+            .panel-body {
+                padding: 16px;
+            }
+
+            /* Stack header elements vertically on mobile */
+            .header {
+                flex-direction: column;
+                padding: 10px;
+                gap: 10px;
+            }
+
+            .logo {
+                position: relative !important;
+                left: auto !important;
+                transform: none !important;
+            }
+
+            .logo img {
+                height: 60px;
+            }
+
+            /* Make dropdowns and inputs touch-friendly */
+            .simple-input, select {
+                min-height: 44px;
+                font-size: 16px; /* Prevents zoom on iOS */
+            }
+
+            /* Adjust button sizes for touch */
+            .btn, .header-btn, button {
+                min-height: 44px;
+                padding: 12px 20px;
+            }
+        }
+
+        /* Mobile (480px and below) */
+        @media (max-width: 480px) {
+            .main {
+                padding: 10px;
+                gap: 12px;
+            }
+
+            .controls {
+                gap: 12px;
+            }
+
+            .record-card {
+                padding: 16px;
+                border-radius: 12px;
+            }
+
+            .record-btn {
+                width: 70px;
+                height: 70px;
+                font-size: 24px;
+                border: 3px solid white;
+            }
+
+            .status-text {
+                font-size: 11px;
+            }
+
+            .timer {
+                font-size: 20px;
+            }
+
+            .info-card {
+                padding: 12px;
+                border-radius: 12px;
+            }
+
+            .card-title {
+                font-size: 14px;
+            }
+
+            .panel {
+                border-radius: 12px;
+            }
+
+            .panel-title {
+                font-size: 14px;
+            }
+
+            .panel-body {
+                padding: 12px;
+            }
+
+            /* Hide less important elements on very small screens */
+            #subscriptionBadge {
+                display: none !important;
+            }
+
+            /* Simplify header on mobile */
+            .header {
+                padding: 8px;
+            }
+
+            .logo img {
+                height: 40px;
+            }
+
+            .header-btn {
+                font-size: 12px;
+                padding: 8px 12px;
+            }
+
+            /* Make transcript and notes full width */
+            .transcript-content, .note-content {
+                font-size: 14px;
+                line-height: 1.5;
+            }
+
+            /* Optimize manual input area */
+            .manual-input-area {
+                padding: 12px;
+            }
+
+            #manualTranscriptInput {
+                font-size: 14px;
+                padding: 10px;
+            }
+
+            /* Stack action buttons vertically on mobile */
+            .action-buttons {
+                flex-direction: column;
+                gap: 8px;
+            }
+
+            .action-btn {
+                width: 100%;
+                justify-content: center;
+            }
+        }
+
+        /* Very small mobile (360px and below) */
+        @media (max-width: 360px) {
+            .main {
+                padding: 8px;
+            }
+
+            .record-btn {
+                width: 60px;
+                height: 60px;
+                font-size: 20px;
+            }
+
+            .timer {
+                font-size: 18px;
+            }
+
+            .logo img {
+                height: 32px;
+            }
+
+            body {
+                font-size: 13px;
+            }
+
+            /* Reduce padding further */
+            .panel-body {
+                padding: 10px;
+            }
+
+            .info-card {
+                padding: 10px;
+            }
+        }
+
+        /* Ensure proper touch targets on mobile */
+        @media (pointer: coarse) {
+            button, .btn, a, select, input {
+                min-height: 44px;
+                min-width: 44px;
+            }
+
+            /* Make clickable areas larger */
+            .record-btn {
+                -webkit-tap-highlight-color: transparent;
+            }
+        }
+
+        /* Handle landscape orientation on mobile */
+        @media (max-height: 500px) and (orientation: landscape) {
+            .header {
+                padding: 5px 10px;
+            }
+
+            .logo img {
+                height: 30px;
+            }
+
+            .main {
+                padding: 8px;
+            }
+
+            .record-card {
+                padding: 12px;
+            }
+
+            .record-btn {
+                width: 50px;
+                height: 50px;
+                font-size: 18px;
             }
         }
 
@@ -957,10 +1224,10 @@
 
                 <label style="font-size: 13px; font-weight: 600; color: var(--gray-text); text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 8px;">Category</label>
                 <select class="simple-input" id="categorySelect" onchange="updateTemplates(this.value)" style="cursor: pointer; padding: 12px; margin-bottom: 12px;">
+                    <option value="general" selected>📝 General</option>
                     <option value="medical">🏥 Medical</option>
                     <option value="education">📚 Education</option>
                     <option value="workplace">💼 Workplace</option>
-                    <option value="general">📝 General</option>
                 </select>
 
                 <label style="font-size: 13px; font-weight: 600; color: var(--gray-text); text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 8px;">Template</label>
@@ -1075,7 +1342,6 @@
 
     <!-- Scripts -->
     <script src="transcription-medical-service.js"></script>
-    <script src="openai-responses.js"></script>
     <script src="scribe-app.js"></script>
     
     <script>

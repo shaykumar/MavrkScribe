@@ -20,13 +20,13 @@ class TranscriptionMedicalService {
         if (window.electronAPI) {
             // Listen for transcription updates from backend
             window.electronAPI.onTranscriptionUpdate((data) => {
-                console.log('Transcription update received:', data);
+                // DEBUG: 'Transcription update received:', data);
                 this.handleTranscriptionUpdate(data);
             });
             
             // Listen for errors
             window.electronAPI.onTranscriptionError((data) => {
-                console.error('Transcription error:', data);
+                // ERROR: 'Transcription error:', data);
                 if (this.onError) {
                     this.onError(data.error);
                 }
@@ -35,19 +35,15 @@ class TranscriptionMedicalService {
     }
     
     async start(callbacks = {}) {
-        console.log('Starting AWS Transcribe Medical...');
-        console.log('Callbacks provided:', {
-            hasTranscriptUpdate: !!callbacks.onTranscriptUpdate,
-            hasSegmentComplete: !!callbacks.onSegmentComplete,
-            hasError: !!callbacks.onError
-        });
+        // DEBUG: 'Starting AWS Transcribe Medical...');
+        // DEBUG: Callbacks provided
         
         this.onTranscriptUpdate = callbacks.onTranscriptUpdate || null;
         this.onSegmentComplete = callbacks.onSegmentComplete || null;
         this.onError = callbacks.onError || null;
         
         if (!window.electronAPI) {
-            console.error('Electron API not available');
+            // ERROR: 'Electron API not available');
             if (this.onError) {
                 this.onError('AWS Transcribe Medical requires the desktop application');
             }
@@ -55,7 +51,7 @@ class TranscriptionMedicalService {
         }
         
         try {
-            console.log('Requesting microphone permission...');
+            // DEBUG: 'Requesting microphone permission...');
             // Request microphone permission
             const stream = await navigator.mediaDevices.getUserMedia({ 
                 audio: {
@@ -64,16 +60,16 @@ class TranscriptionMedicalService {
                     sampleRate: 16000
                 } 
             });
-            console.log('Microphone permission granted, stream active');
+            // DEBUG: 'Microphone permission granted, stream active');
             
-            console.log('Starting AWS Transcribe Medical with specialty:', this.currentSpecialty);
+            // DEBUG: 'Starting AWS Transcribe Medical with specialty:', this.currentSpecialty);
             // Start AWS Transcribe Medical through backend
             const result = await window.electronAPI.startMedicalTranscription({
                 specialty: this.currentSpecialty,
                 type: 'CONVERSATION'
             });
             
-            console.log('Backend response:', result);
+            // DEBUG: 'Backend response:', result);
             
             if (result.success) {
                 this.isTranscribing = true;
@@ -81,7 +77,7 @@ class TranscriptionMedicalService {
                 this.transcript = '';
                 this.segments = [];
                 
-                console.log('AWS Transcribe Medical started successfully with ID:', this.transcriptionId);
+                // DEBUG: 'AWS Transcribe Medical started successfully with ID:', this.transcriptionId);
                 
                 // Keep the stream active and start capturing audio
                 this.audioStream = stream;
@@ -91,18 +87,18 @@ class TranscriptionMedicalService {
             } else {
                 // Check if it's a subscription limit error
                 if (result.needsUpgrade) {
-                    console.error('Subscription limit reached:', result.error);
+                    // ERROR: 'Subscription limit reached:', result.error);
                     // Stop the microphone stream
                     stream.getTracks().forEach(track => track.stop());
                     throw new Error(result.error);
                 } else {
                     // AWS Transcribe Medical is required - no fallback
-                    console.error('AWS Transcribe Medical not available:', result.error);
+                    // ERROR: 'AWS Transcribe Medical not available:', result.error);
                     throw new Error(result.error || 'AWS Transcribe Medical is required.');
                 }
             }
         } catch (error) {
-            console.error('Error starting AWS Transcribe Medical:', error);
+            // ERROR: 'Error starting AWS Transcribe Medical:', error);
             if (this.onError) {
                 this.onError(error.message);
             }
@@ -111,17 +107,17 @@ class TranscriptionMedicalService {
     }
     
     startAudioCapture(stream) {
-        console.log('Starting PCM audio capture from microphone...');
+        // DEBUG: 'Starting PCM audio capture from microphone...');
         
         // Try to use PCMRecorder if available
         if (typeof PCMRecorder !== 'undefined' && PCMRecorder) {
-            console.log('Using PCMRecorder for audio capture');
+            // DEBUG: 'Using PCMRecorder for audio capture');
             this.startPCMRecorder(stream);
         } else if (typeof SimplePCMCapture !== 'undefined' && SimplePCMCapture) {
-            console.log('Using SimplePCMCapture for audio capture');
+            // DEBUG: 'Using SimplePCMCapture for audio capture');
             this.startSimplePCMCapture(stream);
         } else {
-            console.log('Using inline PCM capture');
+            // DEBUG: 'Using inline PCM capture');
             this.startInlinePCMCapture(stream);
         }
     }
@@ -137,23 +133,23 @@ class TranscriptionMedicalService {
                     
                     chunkCount++;
                     if (chunkCount % 5 === 0) {
-                        console.log(`Sending PCM chunk #${chunkCount}, size: ${pcmData.byteLength} bytes`);
+                        // DEBUG: `Sending PCM chunk #${chunkCount}, size: ${pcmData.byteLength} bytes`);
                     }
                     
                     // Send to backend
                     if (window.electronAPI) {
                         window.electronAPI.sendAudioChunk(pcmData).catch(err => {
-                            console.error('Error sending audio chunk:', err);
+                            // ERROR: 'Error sending audio chunk:', err);
                         });
                     }
                 }
             });
             
             this.pcmRecorder.start();
-            console.log('PCMRecorder started successfully');
+            // DEBUG: 'PCMRecorder started successfully');
             
         } catch (error) {
-            console.error('Error with PCMRecorder:', error);
+            // ERROR: 'Error with PCMRecorder:', error);
             this.startInlinePCMCapture(stream);
         }
     }
@@ -168,15 +164,15 @@ class TranscriptionMedicalService {
                 // Send to backend
                 if (window.electronAPI) {
                     window.electronAPI.sendAudioChunk(pcmData).catch(err => {
-                        console.error('Error sending audio chunk:', err);
+                        // ERROR: 'Error sending audio chunk:', err);
                     });
                 }
             });
             
-            console.log('SimplePCMCapture started successfully');
+            // DEBUG: 'SimplePCMCapture started successfully');
             
         } catch (error) {
-            console.error('Error with SimplePCMCapture:', error);
+            // ERROR: 'Error with SimplePCMCapture:', error);
             this.startInlinePCMCapture(stream);
         }
     }
@@ -222,27 +218,27 @@ class TranscriptionMedicalService {
                 
                 chunkCount++;
                 if (chunkCount % 10 === 0) {
-                    console.log(`Capturing audio chunk #${chunkCount}`);
+                    // DEBUG: `Capturing audio chunk #${chunkCount}`);
                 }
                 
                 // Send to backend
                 if (window.electronAPI && pcm16.byteLength > 0) {
                     window.electronAPI.sendAudioChunk(pcm16.buffer).catch(err => {
-                        console.error('Error sending audio:', err);
+                        // ERROR: 'Error sending audio:', err);
                     });
                 }
             }, 100); // Capture every 100ms
             
-            console.log('Inline PCM capture started');
+            // DEBUG: 'Inline PCM capture started');
             
         } catch (error) {
-            console.error('Error starting inline PCM capture:', error);
+            // ERROR: 'Error starting inline PCM capture:', error);
             this.startMediaRecorderFallback(stream);
         }
     }
     
     startMediaRecorderFallback(stream) {
-        console.log('Falling back to MediaRecorder...');
+        // DEBUG: 'Falling back to MediaRecorder...');
         
         try {
             // Try to use PCM mime type if available
@@ -257,7 +253,7 @@ class TranscriptionMedicalService {
             for (const type of mimeTypes) {
                 if (MediaRecorder.isTypeSupported(type)) {
                     mimeType = type;
-                    console.log('Using mime type:', mimeType);
+                    // DEBUG: 'Using mime type:', mimeType);
                     break;
                 }
             }
@@ -272,9 +268,9 @@ class TranscriptionMedicalService {
             mediaRecorder.ondataavailable = async (event) => {
                 if (event.data.size > 0 && this.isTranscribing) {
                     chunkCount++;
-                    console.log(`MediaRecorder chunk #${chunkCount}, size: ${event.data.size}`);
+                    // DEBUG: `MediaRecorder chunk #${chunkCount}, size: ${event.data.size}`);
                     // Note: This won't work with AWS Transcribe without conversion
-                    console.warn('MediaRecorder fallback - audio format may not be compatible with AWS Transcribe');
+                    // WARN: 'MediaRecorder fallback - audio format may not be compatible with AWS Transcribe');
                 }
             };
             
@@ -282,16 +278,16 @@ class TranscriptionMedicalService {
             this.mediaRecorder = mediaRecorder;
             
         } catch (error) {
-            console.error('Failed to start MediaRecorder fallback:', error);
+            // ERROR: 'Failed to start MediaRecorder fallback:', error);
         }
     }
     
     handleTranscriptionUpdate(data) {
-        console.log('Received transcription update:', data);
+        // DEBUG: 'Received transcription update:', data);
         
         // Check if this is for the current session (even if just stopped)
         if (data.id !== this.transcriptionId) {
-            console.log('Ignoring update - wrong session ID');
+            // DEBUG: 'Ignoring update - wrong session ID');
             return;
         }
         
@@ -308,11 +304,11 @@ class TranscriptionMedicalService {
     }
     
     processFinalTranscript(data) {
-        console.log('Processing final transcript:', data.text);
+        // DEBUG: 'Processing final transcript:', data.text);
         
         // Don't skip short segments - they might be part of speech
         if (!data.text || data.text.trim().length === 0) {
-            console.log('Skipping empty segment');
+            // DEBUG: 'Skipping empty segment');
             return;
         }
         
@@ -336,26 +332,26 @@ class TranscriptionMedicalService {
         
         // Notify callbacks - these should still work even after stopping
         if (this.onSegmentComplete) {
-            console.log('Calling onSegmentComplete with:', segment);
+            // DEBUG: 'Calling onSegmentComplete with:', segment);
             try {
                 this.onSegmentComplete(segment);
             } catch (error) {
-                console.error('Error in onSegmentComplete callback:', error);
+                // ERROR: 'Error in onSegmentComplete callback:', error);
             }
         }
         
         if (this.onTranscriptUpdate) {
-            console.log('Calling onTranscriptUpdate with transcript length:', this.transcript.length);
+            // DEBUG: 'Calling onTranscriptUpdate with transcript length:', this.transcript.length);
             try {
                 this.onTranscriptUpdate(this.transcript, false);
             } catch (error) {
-                console.error('Error in onTranscriptUpdate callback:', error);
+                // ERROR: 'Error in onTranscriptUpdate callback:', error);
             }
         }
     }
     
     processInterimTranscript(data) {
-        console.log('Processing interim transcript:', data.text);
+        // DEBUG: 'Processing interim transcript:', data.text);
         
         // Show interim results for better UX
         if (this.onTranscriptUpdate && data.text) {
@@ -403,7 +399,7 @@ class TranscriptionMedicalService {
         
         // Log extracted medical information
         if (Object.keys(medicalData).some(key => medicalData[key].length > 0)) {
-            console.log('Medical entities extracted:', medicalData);
+            // DEBUG: 'Medical entities extracted:', medicalData);
             
             // You can display this in a separate panel or highlight in the transcript
             this.displayMedicalEntities(medicalData);
@@ -468,7 +464,7 @@ class TranscriptionMedicalService {
     }
     
     async stop() {
-        console.log('Stopping transcription...');
+        // DEBUG: 'Stopping transcription...');
         if (!this.isTranscribing) return { transcript: this.transcript, segments: this.segments };
         
         // Mark as not transcribing but keep callbacks active for final results
@@ -534,7 +530,7 @@ class TranscriptionMedicalService {
             await window.electronAPI.stopMedicalTranscription();
         }
         
-        console.log('Transcription stopped');
+        // DEBUG: 'Transcription stopped');
         
         return {
             transcript: this.transcript,

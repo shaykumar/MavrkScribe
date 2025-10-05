@@ -19,4 +19,5 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getCheckoutUrl: () => ipcRenderer.invoke('get-checkout-url'),
   cancelSubscription: () => ipcRenderer.invoke('cancel-subscription'),
   setUserEmail: (email) => ipcRenderer.invoke('set-user-email', email),
+  onSubscriptionStatusUpdated: (callback) => ipcRenderer.on('subscription-status-updated', (event, data) => callback(data)),
 });

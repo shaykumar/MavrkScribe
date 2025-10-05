@@ -9,7 +9,7 @@ class SimplePCMCapture {
     }
     
     async start(stream, onData) {
-        console.log('Starting SimplePCMCapture...');
+        // DEBUG:('Starting SimplePCMCapture...');
         
         try {
             // Create audio context for conversion
@@ -27,7 +27,7 @@ class SimplePCMCapture {
             for (const mimeType of mimeTypes) {
                 if (MediaRecorder.isTypeSupported(mimeType)) {
                     selectedMimeType = mimeType;
-                    console.log('Using MIME type:', selectedMimeType);
+                    // DEBUG:('Using MIME type:', selectedMimeType);
                     break;
                 }
             }
@@ -63,7 +63,7 @@ class SimplePCMCapture {
                         }
                         
                         if (chunkCount % 5 === 0) {
-                            console.log(`Converted audio chunk #${chunkCount} to PCM, size: ${pcm16.byteLength} bytes`);
+                            // DEBUG:(`Converted audio chunk #${chunkCount} to PCM, size: ${pcm16.byteLength} bytes`);
                         }
                         
                         // Send PCM data
@@ -74,7 +74,7 @@ class SimplePCMCapture {
                     } catch (error) {
                         // If decoding fails, try sending raw data
                         if (chunkCount % 5 === 0) {
-                            console.log(`Sending raw audio chunk #${chunkCount}, size: ${event.data.size} bytes`);
+                            // DEBUG:(`Sending raw audio chunk #${chunkCount}, size: ${event.data.size} bytes`);
                         }
                         
                         const buffer = await event.data.arrayBuffer();
@@ -89,11 +89,11 @@ class SimplePCMCapture {
             this.isRecording = true;
             this.mediaRecorder.start(250); // Get chunks every 250ms
             
-            console.log('SimplePCMCapture started successfully');
+            // DEBUG:('SimplePCMCapture started successfully');
             return true;
             
         } catch (error) {
-            console.error('Error starting SimplePCMCapture:', error);
+            // ERROR:('Error starting SimplePCMCapture:', error);
             return false;
         }
     }
@@ -111,7 +111,7 @@ class SimplePCMCapture {
             this.audioContext = null;
         }
         
-        console.log('SimplePCMCapture stopped');
+        // DEBUG:('SimplePCMCapture stopped');
     }
 }
 

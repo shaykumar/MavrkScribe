@@ -34,7 +34,7 @@ class OpenAIResponsesAPI {
             
             // Check if model supports web search
             if (!this.supportsWebSearch(model)) {
-                console.warn(`Model ${model} may not support web_search. Trying anyway...`);
+                // WARN:(`Model ${model} may not support web_search. Trying anyway...`);
             }
 
             const requestBody = {
@@ -75,18 +75,18 @@ class OpenAIResponsesAPI {
                 });
 
                 res.on('end', () => {
-                    console.log('Responses API Status:', res.statusCode);
-                    console.log('Responses API Raw Response:', responseData.substring(0, 500));
+                    // DEBUG:('Responses API Status:', res.statusCode);
+                    // DEBUG:('Responses API Raw Response:', responseData.substring(0, 500));
                     
                     try {
                         const parsed = JSON.parse(responseData);
                         
                         if (parsed.error) {
-                            console.error('Responses API Error:', parsed.error);
+                            // ERROR:('Responses API Error:', parsed.error);
                             
                             // Check if it's a model not found error - might need to use different model
                             if (parsed.error.code === 'model_not_found' || parsed.error.message?.includes('model')) {
-                                console.log('Model not supported for Responses API, try gpt-4o or gpt-4o-mini');
+                                // DEBUG:('Model not supported for Responses API, try gpt-4o or gpt-4o-mini');
                             }
                             
                             resolve({
@@ -99,7 +99,7 @@ class OpenAIResponsesAPI {
                         }
 
                         // Log the parsed response for debugging
-                        console.log('Parsed Responses API output:', JSON.stringify(parsed, null, 2).substring(0, 1000));
+                        // DEBUG:('Parsed Responses API output:', JSON.stringify(parsed, null, 2).substring(0, 1000));
 
                         // Parse the response according to the documentation format
                         const result = this.parseResponsesAPIOutput(parsed);
@@ -115,8 +115,8 @@ class OpenAIResponsesAPI {
                         });
                         
                     } catch (error) {
-                        console.error('Error parsing response:', error);
-                        console.error('Raw response that failed to parse:', responseData);
+                        // ERROR:('Error parsing response:', error);
+                        // ERROR:('Raw response that failed to parse:', responseData);
                         resolve({
                             success: false,
                             error: 'Failed to parse response',
@@ -128,7 +128,7 @@ class OpenAIResponsesAPI {
             });
 
             req.on('error', (error) => {
-                console.error('Request error:', error);
+                // ERROR:('Request error:', error);
                 resolve({
                     success: false,
                     error: error.message

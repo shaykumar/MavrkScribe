@@ -3,7 +3,7 @@ let isRecording = false;
 let recordingStartTime = null;
 let recordingTimer = null;
 let currentTranscript = '';
-let selectedTemplate = 'soap';
+let selectedTemplate = 'general';
 let wordCount = 0;
 let sessionStartTime = Date.now();
 let currentConsultationId = null; // Track current consultation ID
@@ -11,26 +11,115 @@ let currentConsultationId = null; // Track current consultation ID
 // Transcription service
 let transcriptionService = null;
 
+// Safe HTML utilities to prevent XSS
+function safeSetHTML(element, html) {
+    if (!element) return;
+
+    // For simple text without HTML, use textContent
+    if (!html || typeof html !== 'string' || !html.includes('<')) {
+        element.textContent = html || '';
+        return;
+    }
+
+    // Create a temporary container
+    const temp = document.createElement('div');
+    temp.innerHTML = html;
+
+    // Remove dangerous elements
+    const dangerous = temp.querySelectorAll('script, iframe, object, embed, form, link, meta');
+    dangerous.forEach(el => el.remove());
+
+    // Clean attributes
+    const allElements = temp.querySelectorAll('*');
+    allElements.forEach(el => {
+        for (const attr of [...el.attributes]) {
+            // Remove event handlers and javascript: hrefs
+            if (attr.name.startsWith('on') ||
+                (attr.name === 'href' && attr.value.includes('javascript:')) ||
+                attr.name === 'style') {
+                el.removeAttribute(attr.name);
+            }
+        }
+    });
+
+    element.innerHTML = temp.innerHTML;
+}
+
+// Input sanitization utility
+function sanitizeInput(input) {
+    if (!input) return '';
+    return String(input)
+        .replace(/[<>]/g, '') // Remove angle brackets
+        .replace(/javascript:/gi, '') // Remove javascript: protocol
+        .replace(/on\w+=/gi, '') // Remove event handlers
+        .trim()
+        .substring(0, 500); // Limit length
+}
+
+// Initialize secure storage for sensitive data
+const secureStorage = {
+    setItem: (key, value) => {
+        try {
+            // Use electron store if available for better security
+            if (window.electronAPI && window.electronAPI.secureStore) {
+                return window.electronAPI.secureStore.set(key, value);
+            }
+            // Fallback to localStorage with basic encoding
+            const encoded = btoa(JSON.stringify(value));
+            localStorage.setItem(key, encoded);
+        } catch (e) {
+            // Fail silently
+        }
+    },
+    getItem: (key) => {
+        try {
+            if (window.electronAPI && window.electronAPI.secureStore) {
+                return window.electronAPI.secureStore.get(key);
+            }
+            const encoded = localStorage.getItem(key);
+            if (!encoded) return null;
+            return JSON.parse(atob(encoded));
+        } catch (e) {
+            return null;
+        }
+    },
+    removeItem: (key) => {
+        try {
+            if (window.electronAPI && window.electronAPI.secureStore) {
+                return window.electronAPI.secureStore.delete(key);
+            }
+            localStorage.removeItem(key);
+        } catch (e) {
+            // Fail silently
+        }
+    }
+};
+
 // Initialize application
 document.addEventListener('DOMContentLoaded', () => {
     updateSessionTimer();
     setInterval(updateSessionTimer, 60000); // Update every minute
-    
+
     // Initialize transcription service - ONLY AWS Transcribe Medical
     if (typeof TranscriptionMedicalService !== 'undefined') {
         transcriptionService = new TranscriptionMedicalService();
-        console.log('AWS Transcribe Medical Service initialized (HIPAA Compliant)');
+        // AWS Transcribe Medical Service initialized
     } else {
-        console.error('AWS Transcribe Medical service not available');
+        // AWS Transcribe Medical service not available
         showToast('AWS Transcribe Medical is required for HIPAA compliance', 'error');
     }
-    
+
     // Load saved preferences
     loadPreferences();
-    
+
+    // Initialize with General category templates
+    if (typeof updateTemplates === 'function') {
+        updateTemplates('general');
+    }
+
     // Check for microphone permissions
     checkMicrophonePermissions();
-    
+
     // Setup keyboard shortcuts
     setupKeyboardShortcuts();
     
@@ -54,11 +143,19 @@ document.addEventListener('DOMContentLoaded', () => {
         `;
         badge.innerHTML = 'Loading...';
         badge.onclick = function() { showSubscriptionModal(); };
-        console.log('Subscription badge initialized');
+        // Subscription badge initialized
     }
-    
+
     // Check subscription status
     checkSubscriptionStatus();
+
+    // Listen for subscription status updates
+    if (window.electronAPI && window.electronAPI.onSubscriptionStatusUpdated) {
+        window.electronAPI.onSubscriptionStatusUpdated((updatedStatus) => {
+            subscriptionStatus = updatedStatus;
+            updateSubscriptionDisplay(updatedStatus);
+        });
+    }
 });
 
 // Toggle recording
@@ -108,15 +205,11 @@ async function startRecording() {
         
         // Start real-time transcription
         if (transcriptionService) {
-            console.log('Starting transcription with service');
+            // Starting transcription with service
             const started = await transcriptionService.start({
                 onTranscriptUpdate: (transcript, isInterim) => {
                     try {
-                        console.log('Transcript update received:', { 
-                            length: transcript.length, 
-                            isInterim,
-                            preview: transcript.substring(0, 100) 
-                        });
+                        // Transcript update received
                         
                         // Update live transcript display
                         if (!isInterim) {
@@ -148,20 +241,20 @@ async function startRecording() {
                             updateInterimTranscript(transcript);
                         }
                     } catch (err) {
-                        console.error('Error processing transcript update:', err);
+                        // Error processing transcript update
                     }
                 },
                 onSegmentComplete: (segment) => {
                     try {
-                        console.log('Segment complete:', segment);
+                        // Segment complete
                         // Add completed segment to display
                         addTranscriptSegment(segment.speaker, segment.text);
                     } catch (err) {
-                        console.error('Error processing segment:', err);
+                        // Error processing segment
                     }
                 },
                 onError: (error) => {
-                    console.error('Transcription error:', error);
+                    // Transcription error
                     
                     // Check if it's a subscription limit error
                     if (error.includes('Daily limit reached') || error.includes('Upgrade to Pro')) {
@@ -180,18 +273,18 @@ async function startRecording() {
             });
             
             if (started) {
-                console.log('Transcription service started successfully');
+                // Transcription service started successfully
                 showToast('Recording started - speak naturally');
             } else {
                 throw new Error('Failed to start transcription service');
             }
         } else {
-            console.log('No transcription service available');
+            // DEBUG: 'No transcription service available');
             showToast('Transcription service not available', 'error');
             stopRecording();
         }
     } catch (error) {
-        console.error('Error starting recording:', error);
+        // Error starting recording
         
         // Reset UI on error
         isRecording = false;
@@ -213,7 +306,7 @@ async function startRecording() {
 
 // Stop recording
 async function stopRecording() {
-    console.log('Stopping recording...');
+    // DEBUG: 'Stopping recording...');
     
     // Stop recording but keep UI ready for final updates
     isRecording = false;
@@ -223,7 +316,7 @@ async function stopRecording() {
         const result = await transcriptionService.stop();
         if (result && result.transcript) {
             currentTranscript = result.transcript;
-            console.log('Final transcript length:', currentTranscript.length);
+            // DEBUG: 'Final transcript length:', currentTranscript.length);
         }
     }
     
@@ -356,24 +449,24 @@ function updateInterimTranscript(transcript) {
 
 // Add transcript segment
 function addTranscriptSegment(speaker, text) {
-    console.log('Adding transcript segment:', { speaker, text });
+    // DEBUG: 'Adding transcript segment:', { speaker, text });
     
     const transcriptContent = document.getElementById('transcriptContent');
     if (!transcriptContent) {
-        console.error('Transcript content element not found!');
+        // ERROR: 'Transcript content element not found!');
         return;
     }
     
     // If text is empty, skip
     if (!text || text.trim().length === 0) {
-        console.log('Skipping empty segment');
+        // DEBUG: 'Skipping empty segment');
         return;
     }
     
     // Remove placeholder if it exists
     const placeholder = transcriptContent.querySelector('.transcript-placeholder');
     if (placeholder) {
-        console.log('Removing placeholder');
+        // DEBUG: 'Removing placeholder');
         placeholder.remove();
     }
     
@@ -386,7 +479,7 @@ function addTranscriptSegment(speaker, text) {
         // Append to existing segment from same speaker
         const textDiv = lastSegment.querySelector('div:last-child');
         textDiv.textContent = textDiv.textContent + ' ' + text;
-        console.log('Appended to existing segment');
+        // DEBUG: 'Appended to existing segment');
     } else {
         // Create new segment
         const segment = document.createElement('div');
@@ -407,7 +500,7 @@ function addTranscriptSegment(speaker, text) {
     
     transcriptContent.scrollTop = transcriptContent.scrollHeight;
     
-    console.log('Segment added to DOM');
+    // DEBUG: 'Segment added to DOM');
     
     // Animate new segment
     segment.style.animation = 'fadeIn 0.3s ease';
@@ -533,15 +626,15 @@ function addManualTranscriptNote() {
     const input = document.getElementById('manualTranscriptInput');
     const transcriptContent = document.getElementById('transcriptContent');
 
-    console.log('addManualTranscriptNote called');
+    // DEBUG: 'addManualTranscriptNote called');
 
     if (!input || !transcriptContent) {
-        console.error('Manual input or transcript content not found');
+        // ERROR: 'Manual input or transcript content not found');
         return;
     }
 
     const note = input.value.trim();
-    console.log('Note to add:', note);
+    // DEBUG: 'Note to add:', note);
 
     if (!note) {
         showToast('Please enter a note', 'warning');
@@ -585,8 +678,8 @@ function addManualTranscriptNote() {
         currentTranscript = `[Manual Note ${timestamp}]: ${note}`;
     }
 
-    console.log('Updated currentTranscript. New length:', currentTranscript.length);
-    console.log('Transcript preview:', currentTranscript.substring(0, 100));
+    // DEBUG: 'Updated currentTranscript. New length:', currentTranscript.length);
+    // DEBUG: 'Transcript preview:', currentTranscript.substring(0, 100));
     
     // Update word count
     const words = note.split(/\s+/).filter(word => word.length > 0);
@@ -630,7 +723,7 @@ async function processAudioForTranscription(audioBlob) {
             }
         };
     } catch (error) {
-        console.error('Error processing audio:', error);
+        // ERROR: 'Error processing audio:', error);
     }
 }
 
@@ -651,8 +744,9 @@ async function generateNote() {
     const noteContent = document.getElementById('noteContent');
     const billingContent = document.getElementById('billingContent');
 
-    console.log('Generate Note called. Current transcript length:', currentTranscript ? currentTranscript.length : 0);
-    console.log('Transcript content:', currentTranscript ? currentTranscript.substring(0, 200) : 'empty');
+    // DEBUG: 'Generate Note called. Current transcript length:', currentTranscript ? currentTranscript.length : 0);
+    // DEBUG: 'Transcript content:', currentTranscript ? currentTranscript.substring(0, 500) : 'empty');
+    // DEBUG: 'Selected template:', selectedTemplate);
 
     if (!currentTranscript || !currentTranscript.trim()) {
         showToast('No content available. Please record or add notes first.', 'error');
@@ -701,7 +795,7 @@ async function generateNote() {
         // Create prompts
         const notePrompt = createNotePrompt(currentTranscript, selectedTemplate, patientName, visitType);
 
-        console.log('Generating note...');
+        // DEBUG: 'Generating note...');
 
         // Call AI to generate note (and billing for medical templates only)
         if (window.electronAPI && window.electronAPI.chatWithLLM) {
@@ -711,7 +805,7 @@ async function generateNote() {
                 if (isMedicalTemplate) {
                     // For medical templates, generate both note and billing
                     const billingPrompt = createBillingPrompt(currentTranscript, visitType);
-                    console.log('Also generating billing suggestions for medical template...');
+                    // DEBUG: 'Also generating billing suggestions for medical template...');
 
                     // Make parallel calls
                     [noteResponse, billingResponse] = await Promise.all([
@@ -724,8 +818,9 @@ async function generateNote() {
                 }
                 
                 // Handle note response
+                // DEBUG: 'Note response received:', JSON.stringify(noteResponse).substring(0, 200));
                 if (noteResponse && noteResponse.success && noteResponse.result) {
-                    console.log('AI generated note successfully');
+                    // DEBUG: 'AI generated note successfully');
                     displayGeneratedNote(noteResponse.result);
                     showToast('Clinical note generated successfully');
                     // Auto-save to history after successful generation
@@ -733,17 +828,17 @@ async function generateNote() {
                         saveToHistory();
                     }, 500);
                 } else {
-                    console.error('Note generation failed:', noteResponse);
+                    // Note generation failed - using template note
                     generateTemplateNote();
                 }
                 
                 // Handle billing response (only for medical templates)
                 if (isMedicalTemplate) {
                     if (billingResponse && billingResponse.success && billingResponse.result) {
-                        console.log('Billing suggestions generated');
+                        // DEBUG: 'Billing suggestions generated');
                         displayBillingSuggestions(billingResponse.result);
                     } else {
-                        console.error('Billing generation failed:', billingResponse);
+                        // ERROR: 'Billing generation failed:', billingResponse);
                         if (billingContent) {
                             billingContent.innerHTML = '<div class="helper-empty"><span style="opacity: 0.5;">💡 Unable to generate billing suggestions</span></div>';
                         }
@@ -751,18 +846,18 @@ async function generateNote() {
                 }
                 
             } catch (err) {
-                console.error('Error calling AI:', err);
+                // ERROR: 'Error calling AI:', err);
                 showToast('Error calling AI service. Using template.', 'error');
                 generateTemplateNote();
                 billingContent.innerHTML = '<div class="helper-empty"><span style="opacity: 0.5;">💡 Billing suggestions unavailable</span></div>';
             }
         } else {
-            console.log('AI not available, using template');
+            // DEBUG: 'AI not available, using template');
             generateTemplateNote();
             billingContent.innerHTML = '<div class="helper-empty"><span style="opacity: 0.5;">💡 AI service not available</span></div>';
         }
     } catch (error) {
-        console.error('Error generating note:', error);
+        // ERROR: 'Error generating note:', error);
         showToast('Using template-based note', 'warning');
         generateTemplateNote();
     } finally {
@@ -952,35 +1047,22 @@ Generate a progress note in MARKDOWN format:
 - **Tests Ordered:** 
 - **Referrals:** `,
 
-        meeting: `Generate comprehensive meeting notes from this transcript.
+        meeting: `Generate comprehensive meeting notes from this transcript. Format using MARKDOWN.
 
-Format using MARKDOWN:
+Transcript: ${transcript}
 
-# Meeting Notes
-**Date:** ${new Date().toLocaleDateString()}
-**Subject:** ${patientName || 'Meeting'}
+Please analyze the above transcript and create meeting notes including:
+- Attendees (if mentioned)
+- Key topics discussed
+- Decisions made
+- Action items with owners and deadlines (in table format)
+- Next steps`,
 
-## Attendees
-[Extract from transcript]
+        lecture: `Generate comprehensive lecture notes from this transcript. Format using MARKDOWN.
 
-## Agenda & Discussion
-### Key Topics
--
+Transcript: ${transcript}
 
-## Decisions Made
--
-
-## Action Items
-| Action | Owner | Deadline |
-|--------|-------|----------|
-| | | |
-
-## Next Steps
-- `,
-
-        lecture: `Generate comprehensive lecture notes from this transcript.
-
-Format using MARKDOWN:
+Please analyze the above transcript and create structured lecture notes including:
 
 # Lecture Notes
 **Date:** ${new Date().toLocaleDateString()}
@@ -1004,9 +1086,11 @@ Format using MARKDOWN:
 ### Questions to Review
 - `,
 
-        seminar: `Generate seminar notes from this transcript.
+        seminar: `Generate seminar notes from this transcript. Format using MARKDOWN.
 
-Format using MARKDOWN:
+Transcript: ${transcript}
+
+Please analyze the above transcript and create structured seminar notes including:
 
 # Seminar Notes
 **Date:** ${new Date().toLocaleDateString()}
@@ -1029,9 +1113,11 @@ Format using MARKDOWN:
 ## Follow-up Resources
 - `,
 
-        study: `Generate study session notes from this transcript.
+        study: `Generate study session notes from this transcript. Format using MARKDOWN.
 
-Format using MARKDOWN:
+Transcript: ${transcript}
+
+Please analyze the above transcript and create structured study notes including:
 
 # Study Session Notes
 **Date:** ${new Date().toLocaleDateString()}
@@ -1056,9 +1142,11 @@ Format using MARKDOWN:
 ## Next Session Plan
 - `,
 
-        standup: `Generate stand-up meeting notes from this transcript.
+        standup: `Generate stand-up meeting notes from this transcript. Format using MARKDOWN.
 
-Format using MARKDOWN:
+Transcript: ${transcript}
+
+Please analyze the above transcript and create structured stand-up notes including:
 
 # Stand-up Notes
 **Date:** ${new Date().toLocaleDateString()}
@@ -1081,9 +1169,11 @@ Format using MARKDOWN:
 ## Notes
 - `,
 
-        interview: `Generate interview notes from this transcript.
+        interview: `Generate interview notes from this transcript. Format using MARKDOWN.
 
-Format using MARKDOWN:
+Transcript: ${transcript}
+
+Please analyze the above transcript and create structured interview notes including:
 
 # Interview Notes
 **Date:** ${new Date().toLocaleDateString()}
@@ -1108,9 +1198,11 @@ Format using MARKDOWN:
 ## Recommendations/Next Steps
 - `,
 
-        review: `Generate performance review notes from this transcript.
+        review: `Generate performance review notes from this transcript. Format using MARKDOWN.
 
-Format using MARKDOWN:
+Transcript: ${transcript}
+
+Please analyze the above transcript and create structured performance review notes including:
 
 # Performance Review Notes
 **Date:** ${new Date().toLocaleDateString()}
@@ -1139,9 +1231,11 @@ Format using MARKDOWN:
 ## Next Review Date
 - `,
 
-        personal: `Generate personal notes from this transcript.
+        personal: `Generate personal notes from this transcript. Format using MARKDOWN.
 
-Format using MARKDOWN:
+Transcript: ${transcript}
+
+Please analyze the above transcript and create structured personal notes including:
 
 # Personal Notes
 **Date:** ${new Date().toLocaleDateString()}
@@ -1162,9 +1256,11 @@ Format using MARKDOWN:
 ## Follow-up
 - `,
 
-        brainstorm: `Generate brainstorming notes from this transcript.
+        brainstorm: `Generate brainstorming notes from this transcript. Format using MARKDOWN.
 
-Format using MARKDOWN:
+Transcript: ${transcript}
+
+Please analyze the above transcript and create structured brainstorming notes including:
 
 # Brainstorming Session
 **Date:** ${new Date().toLocaleDateString()}
@@ -1192,29 +1288,16 @@ Format using MARKDOWN:
 ## Action Items
 - `,
 
-        general: `Generate well-organized notes from this transcript.
+        general: `Generate well-organized notes from this transcript. Format using MARKDOWN with proper headers and sections.
 
-Format using MARKDOWN:
+Transcript: ${transcript}
 
-# Notes
-**Date:** ${new Date().toLocaleDateString()}
-**Title:** ${patientName || 'General Notes'}
-
-## Overview
--
-
-## Main Content
-### Key Points
--
-
-### Details
--
-
-## Summary
--
-
-## Follow-up Items
-- `
+Please analyze the above transcript and create comprehensive notes with:
+- A clear overview
+- Main key points extracted from the content
+- Important details
+- A summary
+- Any follow-up items mentioned`
     };
 
     return templates[template] || templates.general;
@@ -1430,7 +1513,7 @@ function parseNoteIntoSections(noteText) {
 
 // Generate template-based note when AI is not available
 function generateTemplateNote() {
-    console.log('Generating template-based note...');
+    // DEBUG: 'Generating template-based note...');
 
     const sessionName = document.getElementById('sessionName').value || 'Note';
     const sessionType = document.getElementById('sessionType').value || 'General';
@@ -1449,7 +1532,7 @@ function generateTemplateNote() {
         noteText = generateProgressTemplate(sessionName, sessionType, date, extractedInfo);
     }
     
-    console.log('Template note generated');
+    // DEBUG: 'Template note generated');
     displayGeneratedNote(noteText);
 }
 
@@ -1701,7 +1784,7 @@ async function copyNote() {
         await navigator.clipboard.writeText(noteText);
         showToast('Note copied to clipboard');
     } catch (error) {
-        console.error('Error copying to clipboard:', error);
+        // ERROR: 'Error copying to clipboard:', error);
         showToast('Failed to copy note', 'error');
     }
 }
@@ -1788,7 +1871,7 @@ async function checkMicrophonePermissions() {
             }
         };
     } catch (error) {
-        console.log('Permissions API not supported');
+        // DEBUG: 'Permissions API not supported');
     }
 }
 
@@ -1802,7 +1885,7 @@ function updateSessionTimer() {
 function showToast(message, type = 'success') {
     const toast = document.getElementById('toast');
     if (!toast) {
-        console.error('Toast element not found');
+        // ERROR: 'Toast element not found');
         return;
     }
     
@@ -1829,7 +1912,7 @@ function showToast(message, type = 'success') {
 // Load user preferences
 function loadPreferences() {
     // Load saved preferences from localStorage
-    const savedTemplate = localStorage.getItem('preferredTemplate');
+    const savedTemplate = secureStorage.getItem('preferredTemplate');
     if (savedTemplate) {
         selectTemplate(savedTemplate);
     }
@@ -1837,7 +1920,7 @@ function loadPreferences() {
 
 // Save preferences
 function savePreferences() {
-    localStorage.setItem('preferredTemplate', selectedTemplate);
+    secureStorage.setItem('preferredTemplate', selectedTemplate);
 }
 
 // Generate UUID v4
@@ -1852,7 +1935,7 @@ function generateUUID() {
 // Start new consultation session
 function startNewConsultation() {
     currentConsultationId = generateUUID();
-    console.log('Started new consultation:', currentConsultationId);
+    // DEBUG: 'Started new consultation:', currentConsultationId);
 }
 
 // Clear current session for new consultation
@@ -1919,7 +2002,7 @@ function saveToHistory() {
     };
     
     // Get existing history
-    let history = JSON.parse(localStorage.getItem('consultationHistory') || '[]');
+    let history = JSON.parse(secureStorage.getItem('consultationHistory') || '[]');
     
     // Check if this consultation already exists
     const existingIndex = history.findIndex(item => item.id === currentConsultationId);
@@ -1940,7 +2023,7 @@ function saveToHistory() {
     }
     
     // Save to localStorage
-    localStorage.setItem('consultationHistory', JSON.stringify(history));
+    secureStorage.setItem('consultationHistory', JSON.stringify(history));
 }
 
 // Show history modal
@@ -1949,7 +2032,7 @@ function showHistory() {
     const historyList = document.getElementById('historyList');
     
     // Get history from localStorage
-    const history = JSON.parse(localStorage.getItem('consultationHistory') || '[]');
+    const history = JSON.parse(secureStorage.getItem('consultationHistory') || '[]');
     
     if (history.length === 0) {
         historyList.innerHTML = `
@@ -1990,7 +2073,7 @@ function closeHistory() {
 
 // Load a consultation from history
 function loadConsultation(id) {
-    const history = JSON.parse(localStorage.getItem('consultationHistory') || '[]');
+    const history = JSON.parse(secureStorage.getItem('consultationHistory') || '[]');
     const consultation = history.find(item => item.id === id);
     
     if (consultation) {
@@ -2044,7 +2127,7 @@ function loadConsultation(id) {
 // Clear history
 function clearHistory() {
     if (confirm('Are you sure you want to clear all consultation history?')) {
-        localStorage.removeItem('consultationHistory');
+        secureStorage.removeItem('consultationHistory');
         showToast('History cleared', 'success');
         showHistory(); // Refresh the modal
     }
@@ -2068,29 +2151,29 @@ let subscriptionStatus = null;
 
 async function checkSubscriptionStatus() {
     try {
-        console.log('Checking subscription status...');
+        // DEBUG: 'Checking subscription status...');
         if (window.electronAPI && window.electronAPI.getSubscriptionStatus) {
             subscriptionStatus = await window.electronAPI.getSubscriptionStatus();
-            console.log('Subscription status:', subscriptionStatus);
+            // DEBUG: 'Subscription status:', subscriptionStatus);
             updateSubscriptionUI();
         } else {
-            console.log('electronAPI.getSubscriptionStatus not available');
+            // DEBUG: 'electronAPI.getSubscriptionStatus not available');
         }
     } catch (error) {
-        console.error('Error checking subscription status:', error);
+        // ERROR: 'Error checking subscription status:', error);
     }
 }
 
 function updateSubscriptionUI() {
-    console.log('Updating subscription UI with:', subscriptionStatus);
+    // DEBUG: 'Updating subscription UI with:', subscriptionStatus);
     if (!subscriptionStatus) {
-        console.log('No subscription status available, using defaults');
+        // DEBUG: 'No subscription status available, using defaults');
         subscriptionStatus = { tier: 'free', remainingToday: 5 };
     }
     
     // Get the subscription badge element
     const badge = document.getElementById('subscriptionBadge');
-    console.log('Badge element found:', badge);
+    // DEBUG: 'Badge element found:', badge);
     
     if (badge) {
         // Show and update the existing badge
@@ -2128,13 +2211,13 @@ function updateSubscriptionUI() {
         }
         
         badge.onclick = function() {
-            console.log('Badge clicked!');
+            // DEBUG: 'Badge clicked!');
             showSubscriptionModal();
         };
         
-        console.log('Badge updated with:', badge.innerHTML);
+        // DEBUG: 'Badge updated with:', badge.innerHTML);
     } else {
-        console.error('Subscription badge element not found');
+        // ERROR: 'Subscription badge element not found');
     }
 }
 
@@ -2248,11 +2331,19 @@ async function showSubscriptionModal() {
 
 window.subscribeToPro = async function() {
     try {
-        console.log('subscribeToPro called');
-        const url = 'https://buy.stripe.com/test_28EeVcfnZeXBeU62eIdwc00';
+        // subscribeToPro called
+        // Get URL from backend (subscription-manager.js)
+        let url;
+        if (window.electronAPI && window.electronAPI.getCheckoutUrl) {
+            url = await window.electronAPI.getCheckoutUrl();
+        } else {
+            // No fallback - payment must go through backend
+            showToast('Payment system not available', 'error');
+            return;
+        }
         
         // Update modal FIRST, before opening checkout window
-        console.log('Updating modal before opening checkout...');
+        // DEBUG: 'Updating modal before opening checkout...');
         
         // Find the subscription modal specifically (the one with the upgrade button)
         const allModals = document.querySelectorAll('.modal');
@@ -2266,7 +2357,7 @@ window.subscribeToPro = async function() {
         }
         
         if (subscriptionModal) {
-            console.log('Subscription modal found, updating content...');
+            // DEBUG: 'Subscription modal found, updating content...');
             const modalContent = subscriptionModal.querySelector('.modal-content');
             if (modalContent) {
                 modalContent.innerHTML = `
@@ -2297,17 +2388,17 @@ window.subscribeToPro = async function() {
                     </div>
                 </div>
             `;
-                console.log('Subscription modal updated successfully');
+                // DEBUG: 'Subscription modal updated successfully');
             } else {
-                console.error('Modal content div not found');
+                // ERROR: 'Modal content div not found');
             }
         } else {
-            console.error('Subscription modal not found');
+            // ERROR: 'Subscription modal not found');
         }
         
         // Now open the Stripe checkout window AFTER updating modal
         setTimeout(() => {
-            console.log('Opening Stripe checkout window...');
+            // DEBUG: 'Opening Stripe checkout window...');
             const checkoutWindow = window.open(url, '_blank');
             showToast('Checkout page opened', 'info');
         }, 100); // Small delay to ensure modal updates first
@@ -2316,14 +2407,14 @@ window.subscribeToPro = async function() {
         startSubscriptionPolling();
         
     } catch (error) {
-        console.error('Error opening checkout:', error);
+        // ERROR: 'Error opening checkout:', error);
         showToast('Error opening checkout', 'error');
     }
 }
 
 // Check payment status and activate subscription
 window.checkPaymentStatus = async function() {
-    console.log('checkPaymentStatus called');
+    // DEBUG: 'checkPaymentStatus called');
     
     // Find the modal that contains payment-related content
     const allModals = document.querySelectorAll('.modal');
@@ -2352,7 +2443,7 @@ window.checkPaymentStatus = async function() {
         }
     }
     
-    console.log('Target modal found:', targetModal);
+    // DEBUG: 'Target modal found:', targetModal);
     
     if (targetModal) {
         const modalContent = targetModal.querySelector('.modal-content');
@@ -2415,7 +2506,7 @@ window.verifyPaymentWithEmail = async function() {
         
         if (response.ok) {
             const data = await response.json();
-            console.log('Subscription check response:', data);
+            // DEBUG: 'Subscription check response:', data);
             
             if (data.subscription && data.subscription.tier === 'pro') {
                 // Save email for future checks
@@ -2445,7 +2536,7 @@ window.verifyPaymentWithEmail = async function() {
             }
         }
     } catch (error) {
-        console.error('Error checking payment:', error);
+        // ERROR: 'Error checking payment:', error);
         showToast('Error verifying payment. Please try again.', 'error');
     }
 }

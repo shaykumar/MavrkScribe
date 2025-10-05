@@ -16,7 +16,7 @@ class PCMRecorder {
     
     async start() {
         if (this.isRecording) {
-            console.log('Already recording');
+            // DEBUG:('Already recording');
             return false;
         }
         
@@ -41,17 +41,17 @@ class PCMRecorder {
             // Start processing buffered audio
             this.startProcessingBuffer();
             
-            console.log('PCM recording started');
+            // DEBUG:('PCM recording started');
             return true;
             
         } catch (error) {
-            console.error('Failed to start PCM recording:', error);
+            // ERROR:('Failed to start PCM recording:', error);
             return false;
         }
     }
     
     async startWithAudioWorklet() {
-        console.log('Using AudioWorklet for PCM capture');
+        // DEBUG:('Using AudioWorklet for PCM capture');
         
         // Create inline worklet processor code
         const processorCode = `
@@ -125,7 +125,7 @@ class PCMRecorder {
     }
     
     startWithScriptProcessor() {
-        console.log('Using ScriptProcessor for PCM capture (fallback)');
+        // DEBUG:('Using ScriptProcessor for PCM capture (fallback)');
         
         const bufferSize = 2048; // Smaller buffer for lower latency
         this.processor = this.audioContext.createScriptProcessor(bufferSize, 1, 1);
@@ -202,7 +202,7 @@ class PCMRecorder {
         // Clear buffer
         this.bufferQueue = [];
         
-        console.log('PCM recording stopped');
+        // DEBUG:('PCM recording stopped');
     }
 }
 

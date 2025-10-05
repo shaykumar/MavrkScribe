@@ -5,8 +5,13 @@ const crypto = require('crypto');
 
 class SubscriptionManager {
     constructor() {
+        // Generate a secure encryption key based on machine ID
+        const machineId = require('crypto').createHash('sha256')
+            .update(require('os').hostname() + require('os').platform())
+            .digest('hex');
+
         this.store = new Store({
-            encryptionKey: 'mavrk-scribe-2024', // Simple encryption for local data
+            encryptionKey: machineId.substring(0, 32), // Use machine-specific key
             schema: {
                 subscription: {
                     type: 'object',
@@ -144,7 +149,7 @@ class SubscriptionManager {
                 return data;
             }
         } catch (error) {
-            console.error('Error checking subscription API:', error);
+            // ERROR:('Error checking subscription API:', error);
         }
         return null;
     }
@@ -233,7 +238,11 @@ class SubscriptionManager {
 
     // Get Stripe checkout URL
     getCheckoutUrl() {
-        return 'https://buy.stripe.com/test_28EeVcfnZeXBeU62eIdwc00';
+        // TODO: Replace with production Stripe URL when ready
+        const isProduction = process.env.NODE_ENV === 'production';
+        return isProduction
+            ? 'https://buy.stripe.com/YOUR_PRODUCTION_CHECKOUT_URL' // Replace with actual production URL
+            : 'https://buy.stripe.com/test_28EeVcfnZeXBeU62eIdwc00';
     }
 
     // Get customer portal URL

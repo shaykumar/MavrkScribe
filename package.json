@@ -23,8 +23,10 @@
   "license": "MIT",
   "dependencies": {
     "@aws-sdk/client-transcribe-streaming": "^3.699.0",
+    "@sentry/electron": "^7.1.1",
     "dotenv": "^16.0.3",
     "electron-store": "^8.1.0",
+    "electron-updater": "^6.6.2",
     "mic": "^2.1.2",
     "openai": "^4.73.0"
   },
@@ -39,6 +41,13 @@
     "directories": {
       "output": "dist"
     },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "mavrk",
+        "repo": "mavrkscribe"
+      }
+    ],
     "files": [
       "**/*",
       "!**/*.ts",
@@ -48,7 +57,7 @@
       "!dist/**/*"
     ],
     "mac": {
-      "category": "public.app-category.medical",
+      "category": "public.app-category.productivity",
       "icon": "icon.png",
       "hardenedRuntime": true,
       "gatekeeperAssess": false,
@@ -67,7 +76,7 @@
       ],
       "icon": "icon.ico",
       "publisherName": "Mavrk",
-      "requestedExecutionLevel": "requireAdministrator"
+      "requestedExecutionLevel": "asInvoker"
     },
     "nsis": {
       "oneClick": false,
@@ -86,11 +95,11 @@
     "linux": {
       "target": "AppImage",
       "icon": "icon.png",
-      "category": "Medical",
+      "category": "Office",
       "desktop": {
         "Name": "MavrkScribe",
-        "Comment": "AI-powered medical scribe application",
-        "Categories": "Medical;Office;"
+        "Comment": "AI-powered note-taking application",
+        "Categories": "Office;Productivity;"
       }
     }
   }

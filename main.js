@@ -1,19 +1,33 @@
 const { app, BrowserWindow, Menu, shell, ipcMain } = require('electron');
 const path = require('path');
+const https = require('https');
+const { AWS_CONFIG, getApiUrl } = require('./aws-config.js');
 require('dotenv').config();
 
-// Log environment loading
-console.log('Environment loaded. OpenAI key present:', !!process.env.OPENAI_API_KEY);
-if (process.env.OPENAI_API_KEY) {
-    console.log('OpenAI key starts with:', process.env.OPENAI_API_KEY.substring(0, 7));
-}
+// Initialize error handling
+const errorHandler = require('./error-handler');
+const logger = require('./logger');
+
+// Initialize Sentry crash reporting
+const { initializeSentry, trackEvent, reportError } = require('./sentry');
+initializeSentry();
+
+// Initialize auto-updater
+const AutoUpdater = require('./auto-updater');
+const autoUpdater = new AutoUpdater();
+
+// Initialize analytics
+const { getAnalytics } = require('./analytics');
+const analytics = getAnalytics();
+
+// Environment loading check - removed console logs for production
 
 // Import AWS Transcribe Medical
 let AWSTranscribeMedical;
 try {
     AWSTranscribeMedical = require('./aws-transcribe-medical');
 } catch (error) {
-    console.error('Failed to load AWS Transcribe Medical:', error);
+    // Failed to load AWS Transcribe Medical - handle silently in production
 }
 
 // Import Subscription Manager
@@ -28,7 +42,7 @@ if (process.env.NODE_ENV !== 'production') {
             hardResetMethod: 'exit'
         });
     } catch (_) {
-        console.log('Error loading electron-reload');
+        // Error loading electron-reload - expected in production
     }
 }
 
@@ -44,7 +58,7 @@ function createWindow() {
             preload: path.join(__dirname, 'preload.js'),
             nodeIntegration: false,
             contextIsolation: true,
-            webSecurity: false
+            webSecurity: true
         },
         icon: path.join(__dirname, 'icon.png'),
         title: 'MavrkScribe',
@@ -53,6 +67,17 @@ function createWindow() {
     });
 
     mainWindow.loadFile('index.html');
+
+    // Set up auto-updater with main window
+    autoUpdater.setMainWindow(mainWindow);
+    autoUpdater.startUpdateCheck(4); // Check every 4 hours
+
+    // Track app launch
+    analytics.track('app_launched', {
+        version: app.getVersion(),
+        platform: process.platform
+    });
+    trackEvent('App Launched');
 
     // Create application menu
     const template = [
@@ -160,7 +185,7 @@ app.on('ready', () => {
         const { systemPreferences } = require('electron');
         systemPreferences.askForMediaAccess('microphone').then(granted => {
             if (!granted) {
-                console.log('Microphone access denied');
+                // Microphone access denied - handle via UI feedback
             }
         });
     }
@@ -191,14 +216,24 @@ ipcMain.handle('start-medical-transcription', async (event, options) => {
         
         // Increment usage counter
         subscriptionManager.incrementUsage();
-        
+
+        // Send updated subscription status to the renderer
+        const updatedStatus = await subscriptionManager.getSubscriptionStatus();
+        if (mainWindow) {
+            mainWindow.webContents.send('subscription-status-updated', updatedStatus);
+        }
+
+        // Track transcription start
+        analytics.trackAction('transcription_started', 'medical', options.specialty || 'general');
+        trackEvent('Transcription Started');
+
         const transcriptionId = Date.now().toString();
         
         // Start transcription
         transcribeMedical.startTranscription({
             ...options,
             onTranscript: (data) => {
-                console.log('Transcript received:', data.text, 'isFinal:', data.isFinal);
+                // Transcript received
                 if (event.sender && !event.sender.isDestroyed()) {
                     event.sender.send('transcription-update', {
                         id: transcriptionId,
@@ -207,7 +242,7 @@ ipcMain.handle('start-medical-transcription', async (event, options) => {
                 }
             },
             onError: (error) => {
-                console.error('Transcription error:', error);
+                // Transcription error
                 if (event.sender && !event.sender.isDestroyed()) {
                     event.sender.send('transcription-error', {
                         id: transcriptionId,
@@ -216,12 +251,12 @@ ipcMain.handle('start-medical-transcription', async (event, options) => {
                 }
             }
         }).catch(error => {
-            console.error('Failed to start transcription:', error);
+            // Failed to start transcription
         });
         
         return { success: true, id: transcriptionId };
     } catch (error) {
-        console.error('Error starting medical transcription:', error);
+        // Error in medical transcription
         return { success: false, error: error.message };
     }
 });
@@ -233,7 +268,7 @@ ipcMain.handle('stop-medical-transcription', async () => {
         }
         return { success: true };
     } catch (error) {
-        console.error('Error stopping medical transcription:', error);
+        // Error stopping transcription
         return { success: false, error: error.message };
     }
 });
@@ -245,7 +280,7 @@ ipcMain.handle('send-audio-chunk', async (event, audioData) => {
         }
         return { success: true };
     } catch (error) {
-        console.error('Error sending audio chunk:', error);
+        // Error sending audio
         return { success: false, error: error.message };
     }
 });
@@ -260,36 +295,105 @@ ipcMain.handle('get-medical-specialties', async () => {
 // OpenAI handler (simplified for MavrkScribe)
 ipcMain.handle('chat-with-llm', async (event, message) => {
     try {
-        console.log('ChatWithLLM called, checking API key...');
-        const apiKey = process.env.OPENAI_API_KEY;
-        
-        if (!apiKey) {
-            console.error('No OpenAI API key found in environment');
-            return { success: false, error: 'OpenAI API key not configured' };
+        // ChatWithLLM called
+
+        // Check if AWS backend is configured
+        if (AWS_CONFIG.API_ENDPOINT && AWS_CONFIG.API_ENDPOINT !== 'YOUR_API_GATEWAY_ENDPOINT') {
+            // Using AWS backend
+
+            return new Promise((resolve, reject) => {
+                // Extract template from message if it's in the prompt
+                let template = 'general';
+                let actualPrompt = message;
+
+                // Check if message contains template info (e.g., for specific templates)
+                if (message.includes('SOAP note')) {
+                    template = 'soap';
+                } else if (message.includes('meeting notes')) {
+                    template = 'meeting';
+                } else if (message.includes('lecture notes')) {
+                    template = 'lecture';
+                } else if (message.includes('personal notes')) {
+                    template = 'personal';
+                }
+
+                const data = JSON.stringify({
+                    prompt: actualPrompt,
+                    template: template
+                });
+
+                const url = new URL(getApiUrl(AWS_CONFIG.NOTE_GENERATION_ENDPOINT));
+
+                const options = {
+                    hostname: url.hostname,
+                    port: 443,
+                    path: url.pathname,
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Content-Length': Buffer.byteLength(data)
+                    }
+                };
+
+                const req = https.request(options, (res) => {
+                    let responseData = '';
+
+                    res.on('data', (chunk) => {
+                        responseData += chunk;
+                    });
+
+                    res.on('end', () => {
+                        try {
+                            const response = JSON.parse(responseData);
+                            // AWS Lambda response received
+                            resolve(response);
+                        } catch (error) {
+                            // Error parsing AWS response
+                            reject({ success: false, error: error.message });
+                        }
+                    });
+                });
+
+                req.on('error', (error) => {
+                    // AWS request error
+                    reject({ success: false, error: error.message });
+                });
+
+                req.write(data);
+                req.end();
+            });
+        } else {
+            // Fallback to direct OpenAI API if AWS backend is not configured
+            // Using direct OpenAI API
+            const apiKey = process.env.OPENAI_API_KEY;
+
+            if (!apiKey) {
+                // No OpenAI API key found
+                return { success: false, error: 'OpenAI API key not configured' };
+            }
+
+            // Initializing OpenAI
+            const OpenAI = require('openai');
+            const openai = new OpenAI({
+                apiKey: apiKey
+            });
+
+            // Making OpenAI API call
+            const completion = await openai.chat.completions.create({
+                model: "gpt-4o-mini",
+                messages: [{ role: "user", content: message }],
+                temperature: 0.7,
+                max_tokens: 2000
+            });
+
+            // OpenAI response received
+            return {
+                success: true,
+                result: completion.choices[0].message.content
+            };
         }
-        
-        console.log('API key found, initializing OpenAI...');
-        const OpenAI = require('openai');
-        const openai = new OpenAI({
-            apiKey: apiKey
-        });
-        
-        console.log('Making OpenAI API call...');
-        const completion = await openai.chat.completions.create({
-            model: "gpt-4o-mini",  // Using gpt-4o-mini for faster responses
-            messages: [{ role: "user", content: message }],
-            temperature: 0.7,
-            max_tokens: 2000
-        });
-        
-        console.log('OpenAI response received');
-        return {
-            success: true,
-            result: completion.choices[0].message.content
-        };
     } catch (error) {
-        console.error('OpenAI API error:', error.message);
-        console.error('Full error:', error);
+        // API error occurred
         return { success: false, error: error.message };
     }
 });
